@@ -1,0 +1,48 @@
+{
+	"name": "chambar",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+		"db:studio": "drizzle-kit studio --config=drizzle.config.ts",
+		"cf:dev": "wrangler pages dev .svelte-kit/cloudflare --compatibility-date=2024-11-01 | cat",
+		"cf:deploy": "wrangler pages deploy .svelte-kit/cloudflare",
+		"deploy": "wrangler deploy",
+		"dev:cf": "wrangler dev --config wrangler.dev.toml",
+		"setup-d1": "node scripts/setup-d1.js",
+		"migrate-d1": "npx wrangler d1 execute chambar-db --file=drizzle/migrations/0001_initial.sql"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20250927.0",
+		"@skeletonlabs/tw-plugin": "^0.4.1",
+		"@sveltejs/adapter-cloudflare": "^4.2.0",
+		"@sveltejs/kit": "^2.22.0",
+		"@sveltejs/vite-plugin-svelte": "^6.0.0",
+		"@tailwindcss/forms": "^0.5.10",
+		"autoprefixer": "^10.4.21",
+		"date-fns": "^4.1.0",
+		"drizzle-kit": "^0.31.5",
+		"drizzle-orm": "^0.44.5",
+		"lucia": "^3.2.2",
+		"postcss": "^8.5.6",
+		"svelte": "^5.0.0",
+		"svelte-check": "^4.0.0",
+		"tailwindcss": "^3.4.13",
+		"typescript": "^5.0.0",
+		"vite": "^7.0.4",
+		"wrangler": "^4.40.2",
+		"xlsx": "^0.18.5",
+		"zod": "^4.1.11"
+	},
+	"dependencies": {
+		"@lucia-auth/adapter-drizzle": "^1.1.0",
+		"chart.js": "^4.5.0"
+	}
+}

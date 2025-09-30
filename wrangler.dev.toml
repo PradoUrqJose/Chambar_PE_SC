@@ -1,0 +1,25 @@
+# Configuración de desarrollo para Cloudflare D1
+# Usar con: npx wrangler dev
+
+name = "chambar-dev"
+main = "src/app.html"
+compatibility_date = "2024-01-01"
+
+# Configuración de D1 (Base de datos local)
+[[d1_databases]]
+binding = "DB"
+database_name = "chambar-db"
+database_id = "df744650-a1b5-474b-aa6c-d26fd9205768"
+
+# Variables de entorno
+[vars]
+NODE_ENV = "development"
+
+# Configuración de build
+[build]
+command = "npm run build"
+cwd = "."
+
+# Configuración de assets
+[assets]
+directory = "static"
