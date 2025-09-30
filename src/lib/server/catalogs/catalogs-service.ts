@@ -5,6 +5,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { generateId } from 'lucia';
 import { getD1Database } from '../db/d1';
 import type { App } from '$lib/types/app';
+import { isLocalDev, mockData, handleDevError } from '../dev-fallback';
 import { 
 	operationDetails, 
 	responsiblePersons, 
@@ -47,6 +48,25 @@ export async function createOperationDetail(
 	platform: App.Platform | undefined,
 	data: CreateOperationDetailData
 ): Promise<CatalogResponse<OperationDetail>> {
+	// Fallback para desarrollo local - forzar modo desarrollo
+	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	
+	if (isLocalDev) {
+		console.log('🔧 Modo desarrollo - simulando creación de detalle de operación');
+		const newDetail = {
+			id: generateId(15),
+			name: data.name,
+			description: data.description || '',
+			type: data.type,
+			active: true,
+			createdAt: new Date()
+		};
+		return {
+			success: true,
+			data: newDetail as OperationDetail
+		};
+	}
+	
 	try {
 		const db = getD1Database(platform);
 		
@@ -199,6 +219,26 @@ export async function createResponsiblePerson(
 	platform: App.Platform | undefined,
 	data: CreateResponsiblePersonData
 ): Promise<CatalogResponse<ResponsiblePerson>> {
+	// Fallback para desarrollo local - forzar modo desarrollo
+	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	
+	if (isLocalDev) {
+		console.log('🔧 Modo desarrollo - simulando creación de responsable');
+		const newResponsible = {
+			id: generateId(15),
+			name: data.name,
+			description: data.description || '',
+			email: data.email || '',
+			phone: data.phone || '',
+			active: true,
+			createdAt: new Date()
+		};
+		return {
+			success: true,
+			data: newResponsible as ResponsiblePerson
+		};
+	}
+	
 	try {
 		const db = getD1Database(platform);
 		
@@ -351,6 +391,25 @@ export async function createStand(
 	platform: App.Platform | undefined,
 	data: CreateStandData
 ): Promise<CatalogResponse<Stand>> {
+	// Fallback para desarrollo local - forzar modo desarrollo
+	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	
+	if (isLocalDev) {
+		console.log('🔧 Modo desarrollo - simulando creación de stand');
+		const newStand = {
+			id: generateId(15),
+			name: data.name,
+			description: data.description || '',
+			location: data.location || '',
+			active: true,
+			createdAt: new Date()
+		};
+		return {
+			success: true,
+			data: newStand as Stand
+		};
+	}
+	
 	try {
 		const db = getD1Database(platform);
 		
@@ -505,6 +564,28 @@ export async function createCompany(
 	platform: App.Platform | undefined,
 	data: CreateCompanyData
 ): Promise<CatalogResponse<Company>> {
+	// Fallback para desarrollo local - forzar modo desarrollo
+	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	
+	if (isLocalDev) {
+		console.log('🔧 Modo desarrollo - simulando creación de empresa');
+		const newCompany = {
+			id: generateId(15),
+			name: data.name,
+			description: data.description || '',
+			ruc: data.ruc || '',
+			address: data.address || '',
+			phone: data.phone || '',
+			email: data.email || '',
+			active: true,
+			createdAt: new Date()
+		};
+		return {
+			success: true,
+			data: newCompany as Company
+		};
+	}
+	
 	try {
 		const db = getD1Database(platform);
 		

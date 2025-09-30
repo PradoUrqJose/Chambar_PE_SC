@@ -10,6 +10,30 @@ import { hashPassword, verifyPassword } from './hash';
 export async function verifyCredentials(platform: App.Platform | undefined, email: string, password: string) {
 	console.log('🔍 Verificando credenciales para:', email);
 	
+	// Detectar si estamos en desarrollo local (sin D1)
+	// En desarrollo local, siempre usar fallback
+	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	
+	console.log('🔍 Debug - platform:', !!platform, 'env.DB:', !!platform?.env?.DB, 'NODE_ENV:', process.env.NODE_ENV, 'isLocalDev:', isLocalDev);
+	
+	if (isLocalDev) {
+		console.log('🔧 Modo desarrollo local - usando credenciales hardcodeadas');
+		// Fallback para desarrollo local - usuario hardcodeado
+		if (email === 'admin@chambar.com' && password === 'admin123') {
+			console.log('✅ Credenciales de desarrollo válidas');
+			return {
+				id: 'admin-dev-001',
+				email: 'admin@chambar.com',
+				role: 'admin',
+				passwordHash: 'dev-hash',
+				createdAt: new Date()
+			};
+		}
+		console.log('❌ Credenciales de desarrollo incorrectas');
+		return null;
+	}
+	
+	// Modo producción - usar D1
 	try {
 		const db = getD1Database(platform);
 		
@@ -45,19 +69,6 @@ export async function verifyCredentials(platform: App.Platform | undefined, emai
 		return user;
 	} catch (error) {
 		console.error('❌ Error verificando credenciales:', error);
-		
-		// Fallback para desarrollo local - usuario hardcodeado
-		if (email === 'admin@chambar.com' && password === 'admin123') {
-			console.log('🔧 Usando credenciales de desarrollo local');
-			return {
-				id: 'admin-dev-001',
-				email: 'admin@chambar.com',
-				role: 'admin',
-				passwordHash: 'dev-hash',
-				createdAt: new Date()
-			};
-		}
-		
 		return null;
 	}
 }
@@ -84,6 +95,28 @@ export async function getSimpleUser(event: any) {
 		return null;
 	}
 	
+	// Detectar si estamos en desarrollo local (sin D1)
+	// En desarrollo local, siempre usar fallback
+	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	
+	if (isLocalDev) {
+		console.log('🔧 Modo desarrollo local - usando usuario hardcodeado');
+		// Fallback para desarrollo local
+		if (userId === 'admin-dev-001') {
+			console.log('✅ Usuario de desarrollo encontrado');
+			return {
+				id: 'admin-dev-001',
+				email: 'admin@chambar.com',
+				role: 'admin',
+				passwordHash: 'dev-hash',
+				createdAt: new Date()
+			};
+		}
+		console.log('❌ Usuario de desarrollo no encontrado');
+		return null;
+	}
+	
+	// Modo producción - usar D1
 	try {
 		const db = getD1Database(event.platform);
 		const user = await db
@@ -95,19 +128,6 @@ export async function getSimpleUser(event: any) {
 		return user.length > 0 ? user[0] : null;
 	} catch (error) {
 		console.error('❌ Error verificando sesión:', error);
-		
-		// Fallback para desarrollo local
-		if (userId === 'admin-dev-001') {
-			console.log('🔧 Usando usuario de desarrollo local');
-			return {
-				id: 'admin-dev-001',
-				email: 'admin@chambar.com',
-				role: 'admin',
-				passwordHash: 'dev-hash',
-				createdAt: new Date()
-			};
-		}
-		
 		return null;
 	}
 }

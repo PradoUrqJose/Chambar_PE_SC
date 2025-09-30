@@ -9,6 +9,7 @@ import { companies } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { createCompany } from '$lib/server/catalogs/catalogs-service';
 import { z } from 'zod';
+import { mockData } from '$lib/server/dev-fallback';
 
 // Esquema de validación para crear empresa
 const companySchema = z.object({
@@ -23,6 +24,14 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 	// Verificar autenticación
 	if (!locals.user) {
 		return json({ success: false, error: 'No autorizado' }, { status: 401 });
+	}
+	
+	// Fallback para desarrollo local - forzar modo desarrollo
+	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	
+	if (isLocalDev) {
+		console.log('🔧 Modo desarrollo - retornando empresas mock');
+		return json({ success: true, data: mockData.companies });
 	}
 	
 	try {
