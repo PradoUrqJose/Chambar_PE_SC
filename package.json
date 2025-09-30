@@ -15,9 +15,12 @@
 		"cf:dev": "wrangler pages dev .svelte-kit/cloudflare --compatibility-date=2024-11-01 | cat",
 		"cf:deploy": "wrangler pages deploy .svelte-kit/cloudflare",
 		"deploy": "wrangler deploy",
-		"dev:cf": "wrangler dev --config wrangler.dev.toml",
+		"dev:cf": "cross-env NODE_ENV=development wrangler pages dev .svelte-kit/cloudflare",
+		"dev:cf:prod": "cross-env NODE_ENV=production wrangler pages dev .svelte-kit/cloudflare",
 		"setup-d1": "node scripts/setup-d1.js",
-		"migrate-d1": "npx wrangler d1 execute chambar-db --file=drizzle/migrations/0001_initial.sql"
+		"migrate-d1": "npx wrangler d1 execute chambar-db --file=drizzle/migrations/0001_initial.sql",
+		"migrate-d1:dev": "npx wrangler d1 execute chambar-dev --file=drizzle/migrations/0001_initial.sql --remote",
+		"seed-d1:dev": "npx wrangler d1 execute chambar-dev --file=scripts/seed-dev-data.sql --remote"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20250927.0",
@@ -27,6 +30,7 @@
 		"@sveltejs/vite-plugin-svelte": "^6.0.0",
 		"@tailwindcss/forms": "^0.5.10",
 		"autoprefixer": "^10.4.21",
+		"cross-env": "^10.1.0",
 		"date-fns": "^4.1.0",
 		"drizzle-kit": "^0.31.5",
 		"drizzle-orm": "^0.44.5",

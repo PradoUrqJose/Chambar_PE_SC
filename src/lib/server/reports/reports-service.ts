@@ -12,7 +12,7 @@ import {
 	companies 
 } from '../db/schema';
 import type { App } from '$lib/types/app';
-import { isLocalDev, mockData, handleDevError } from '../dev-fallback';
+import { isDevelopment, mockData, handleDevError } from '../dev-fallback';
 
 // Interfaces para respuestas de reportes
 export interface ReportResponse<T> {
@@ -81,8 +81,8 @@ export interface CashBoxesReport {
  * Obtiene métricas en tiempo real del sistema
  */
 export async function getRealtimeMetrics(platform: App.Platform | undefined): Promise<RealtimeMetrics> {
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	// Verificar si estamos en desarrollo
+	const isLocalDev = isDevelopment(platform);
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo - retornando métricas mock');

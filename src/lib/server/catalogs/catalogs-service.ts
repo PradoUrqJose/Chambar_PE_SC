@@ -5,7 +5,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { generateId } from 'lucia';
 import { getD1Database } from '../db/d1';
 import type { App } from '$lib/types/app';
-import { isLocalDev, mockData, handleDevError } from '../dev-fallback';
+import { isDevelopment, mockData, handleDevError } from '../dev-fallback';
 import { 
 	operationDetails, 
 	responsiblePersons, 
@@ -48,8 +48,8 @@ export async function createOperationDetail(
 	platform: App.Platform | undefined,
 	data: CreateOperationDetailData
 ): Promise<CatalogResponse<OperationDetail>> {
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	// Verificar si estamos en desarrollo
+	const isLocalDev = isDevelopment(platform);
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo - simulando creación de detalle de operación');
@@ -219,8 +219,8 @@ export async function createResponsiblePerson(
 	platform: App.Platform | undefined,
 	data: CreateResponsiblePersonData
 ): Promise<CatalogResponse<ResponsiblePerson>> {
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	// Verificar si estamos en desarrollo
+	const isLocalDev = isDevelopment(platform);
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo - simulando creación de responsable');
@@ -391,8 +391,8 @@ export async function createStand(
 	platform: App.Platform | undefined,
 	data: CreateStandData
 ): Promise<CatalogResponse<Stand>> {
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	// Verificar si estamos en desarrollo
+	const isLocalDev = isDevelopment(platform);
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo - simulando creación de stand');
@@ -564,8 +564,8 @@ export async function createCompany(
 	platform: App.Platform | undefined,
 	data: CreateCompanyData
 ): Promise<CatalogResponse<Company>> {
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	// Verificar si estamos en desarrollo
+	const isLocalDev = isDevelopment(platform);
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo - simulando creación de empresa');

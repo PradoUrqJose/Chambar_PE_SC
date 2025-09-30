@@ -7,7 +7,7 @@ import { getD1Database } from '../db/d1';
 import { cashBoxes, operations } from '../db/schema';
 import type { CashBox, NewCashBox } from '../db/schema';
 import type { App } from '$lib/types/app';
-import { isLocalDev, mockData, handleDevError } from '../dev-fallback';
+import { isDevelopment, mockData, handleDevError } from '../dev-fallback';
 
 // Interfaz para datos de apertura de caja
 export interface OpenCashBoxData {
@@ -48,8 +48,8 @@ export interface CashBoxOperationsResponse {
  * @returns Caja del día o null si no existe
  */
 export async function getTodayCashBox(platform: App.Platform | undefined, date?: string): Promise<CashBox | null> {
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	// Verificar si estamos en desarrollo
+	const isLocalDev = isDevelopment(platform);
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo - retornando caja mock');
@@ -108,8 +108,8 @@ export async function openCashBox(
 	data: OpenCashBoxData, 
 	userId: string
 ): Promise<CashBoxResponse> {
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	// Verificar si estamos en desarrollo
+	const isLocalDev = isDevelopment(platform);
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo - simulando apertura de caja');
@@ -180,8 +180,8 @@ export async function closeCashBox(
 	data: CloseCashBoxData, 
 	userId: string
 ): Promise<CashBoxResponse> {
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	// Verificar si estamos en desarrollo
+	const isLocalDev = isDevelopment(platform);
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo - simulando cierre de caja');

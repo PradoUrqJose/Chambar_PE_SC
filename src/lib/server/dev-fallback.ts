@@ -4,10 +4,22 @@
 import type { App } from '$lib/types/app';
 
 /**
+ * Detecta si estamos en modo desarrollo
+ */
+export function isDevelopment(platform: App.Platform | undefined): boolean {
+	// Si no hay platform, es desarrollo local
+	if (!platform) return true;
+	
+	// Verificar variable de entorno
+	return platform.env?.NODE_ENV === 'development';
+}
+
+/**
  * Detecta si estamos en modo desarrollo local (sin D1)
+ * @deprecated - Usar isDevelopment en su lugar
  */
 export function isLocalDev(platform: App.Platform | undefined): boolean {
-	return !platform || !platform.env?.DB;
+	return isDevelopment(platform);
 }
 
 /**

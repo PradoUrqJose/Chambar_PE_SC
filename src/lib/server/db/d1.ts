@@ -16,12 +16,24 @@ import { hashPassword } from '../auth/hash';
 import { generateId } from 'lucia';
 import { eq } from 'drizzle-orm';
 
-// Función para obtener la base de datos D1
+// Función para obtener la base de datos D1 correcta según el entorno
 export function getD1Database(platform: App.Platform | undefined) {
-	if (!platform?.env?.DB) {
+	if (!platform?.env) {
 		throw new Error('Base de datos D1 no disponible. Asegúrate de estar ejecutando en Cloudflare Workers');
 	}
-	return drizzle(platform.env.DB);
+	
+	// Determinar qué base de datos usar según el entorno
+	const isDevelopment = platform.env.NODE_ENV === 'development';
+	const dbBinding = isDevelopment ? 'DB_DEV' : 'DB';
+	
+	console.log(`🔍 Usando base de datos: ${isDevelopment ? 'desarrollo' : 'producción'} (${dbBinding})`);
+	
+	const database = platform.env[dbBinding];
+	if (!database) {
+		throw new Error(`Base de datos ${dbBinding} no disponible. Verifica la configuración de D1`);
+	}
+	
+	return drizzle(database);
 }
 
 // Función para inicializar datos de prueba (solo en desarrollo)

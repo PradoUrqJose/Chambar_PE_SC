@@ -11,8 +11,7 @@ export async function verifyCredentials(platform: App.Platform | undefined, emai
 	console.log('🔍 Verificando credenciales para:', email);
 	
 	// Detectar si estamos en desarrollo local (sin D1)
-	// En desarrollo local, siempre usar fallback
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	const isLocalDev = !platform || !platform.env?.DB;
 	
 	console.log('🔍 Debug - platform:', !!platform, 'env.DB:', !!platform?.env?.DB, 'NODE_ENV:', process.env.NODE_ENV, 'isLocalDev:', isLocalDev);
 	
@@ -96,8 +95,7 @@ export async function getSimpleUser(event: any) {
 	}
 	
 	// Detectar si estamos en desarrollo local (sin D1)
-	// En desarrollo local, siempre usar fallback
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	const isLocalDev = !event.platform || !event.platform.env?.DB;
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo local - usando usuario hardcodeado');

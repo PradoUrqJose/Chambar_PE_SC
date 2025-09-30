@@ -7,7 +7,7 @@ import { getD1Database } from '../db/d1';
 import { operations, cashBoxes, operationDetails, responsiblePersons, stands, companies } from '../db/schema';
 import type { Operation, NewOperation } from '../db/schema';
 import type { App } from '$lib/types/app';
-import { isLocalDev, mockData, handleDevError } from '../dev-fallback';
+import { isDevelopment, mockData, handleDevError } from '../dev-fallback';
 
 // Interfaz para datos de nueva operación
 export interface CreateOperationData {
@@ -55,8 +55,8 @@ export interface OperationsWithDetailsResponse {
  * @returns Lista de operaciones
  */
 export async function getOperationsByCashBox(platform: App.Platform | undefined, cashBoxId: string): Promise<Operation[]> {
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	// Verificar si estamos en desarrollo
+	const isLocalDev = isDevelopment(platform);
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo - retornando operaciones mock');
@@ -84,8 +84,8 @@ export async function getOperations(platform: App.Platform | undefined, filters?
 	date?: string;
 	search?: string;
 }): Promise<Operation[]> {
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
+	// Verificar si estamos en desarrollo
+	const isLocalDev = isDevelopment(platform);
 	
 	if (isLocalDev) {
 		console.log('🔧 Modo desarrollo - retornando operaciones mock');
