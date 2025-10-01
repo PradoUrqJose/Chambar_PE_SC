@@ -13,7 +13,6 @@
 	import type { CashBox } from '$lib/services/cash-boxes-service';
 	import type { Operation } from '$lib/services/operations-service';
 	import { 
-		getCashBoxByDate,
 		findLastPendingBalance, 
 		validatePendingBalance, 
 		markPendingBalanceAsHandled, 
@@ -92,8 +91,28 @@
 	// Caja para la fecha actual (derivado del estado)
 	let cashBoxForDate = $derived((() => {
 		const targetDate = toPeruDateString(currentDate);
-		// Buscar en las cajas cargadas
-		return cashBoxes.find(cb => cb.businessDate === targetDate) || null;
+		
+		// Buscar en las cajas cargadas desde la API
+		const existingBox = cashBoxes.find(cb => cb.businessDate === targetDate);
+		
+		// Si existe en la API, usarla
+		if (existingBox) {
+			return existingBox;
+		}
+		
+		// Si no existe, retornar una caja vacía por defecto (sin necesidad de backend)
+		return {
+			id: `temp-${targetDate}`,
+			name: `Caja ${targetDate}`,
+			status: 'empty' as const,
+			openingAmount: 0,
+			openedAt: null,
+			closedAt: null,
+			reopenedAt: null,
+			businessDate: targetDate,
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString()
+		};
 	})());
 
 	// Helper para convertir fecha a string en zona horaria de Perú (YYYY-MM-DD)
@@ -169,24 +188,15 @@
 		}
 	}
 
-	// Función para cargar cajas
+	// Función para cargar cajas desde la API
 	async function loadCashBoxes() {
 		try {
-			// Asegurar que existe la caja para la fecha actual
-			const targetDate = toPeruDateString(currentDate);
-			console.log('📦 loadCashBoxes - targetDate:', targetDate);
-			
-			const createdBox = getCashBoxByDate(targetDate);
-			console.log('📦 Caja creada/obtenida:', createdBox);
-			
-			// Cargar desde la API
 			const response = await fetch('/api/cash-boxes');
 			
 			if (response.ok) {
 				const data = await response.json();
 				cashBoxes = data;
-				console.log(`📦 Cajas cargadas desde API:`, cashBoxes);
-				console.log(`📦 cashBoxForDate (derived):`, cashBoxForDate);
+				console.log(`📦 Cajas cargadas desde API (${cashBoxes.length}):`, cashBoxes);
 				updateCurrentOpenCashBox();
 			} else {
 				console.error('❌ Error loading cash boxes:', response.statusText);
@@ -275,11 +285,46 @@
 				return; // No abrir la caja hasta que se maneje el saldo pendiente
 			}
 
-			// Si no hay saldo pendiente, abrir caja normalmente
-			await openCashBoxDirectly(cashBoxForDate.id);
+			// Si es una caja temporal (no existe en backend), crearla primero
+			if (cashBoxForDate.id.startsWith('temp-')) {
+				await createAndOpenCashBox();
+			} else {
+				// Si ya existe, solo abrirla
+				await openCashBoxDirectly(cashBoxForDate.id);
+			}
 		} catch (error) {
 			console.error('Error opening cash box:', error);
 			errorMessage = 'Error al abrir la caja';
+		}
+	}
+
+	// Función para crear y abrir una caja nueva
+	async function createAndOpenCashBox() {
+		try {
+			const targetDate = toPeruDateString(currentDate);
+			
+			// Crear la caja en el backend
+			const createResponse = await fetch('/api/cash-boxes', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ 
+					name: `Caja ${targetDate}`,
+					businessDate: targetDate
+				})
+			});
+
+			if (!createResponse.ok) {
+				errorMessage = 'Error al crear la caja';
+				return;
+			}
+
+			const newCashBox = await createResponse.json();
+			
+			// Abrir la caja recién creada
+			await openCashBoxDirectly(newCashBox.id);
+		} catch (error) {
+			console.error('Error creating and opening cash box:', error);
+			errorMessage = 'Error al crear la caja';
 		}
 	}
 
