@@ -131,8 +131,9 @@ export async function closeCashBox(
 	
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
-		console.log('Modo desarrollo: simulando cierre de caja');
-		updateMockCashBoxStatus(id, 'closed', 0, undefined, 'cerrado');
+		console.log('🔒 Modo desarrollo: cerrando caja', id);
+		updateMockCashBoxStatus(id, 'closed');
+		console.log('✅ Caja cerrada exitosamente');
 		return { success: true };
 	}
 	

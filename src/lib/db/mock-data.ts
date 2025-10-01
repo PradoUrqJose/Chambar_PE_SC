@@ -130,19 +130,23 @@ export function updateMockCashBoxStatus(id: string, status: 'empty' | 'open' | '
 		// Cerrar caja
 		cashBox.closedAt = new Date().toISOString();
 		
-		// Calcular saldo final
+		// Calcular saldo final dinámicamente
 		const finalBalance = computeCurrentAmount(id);
 		cashBox.finalBalance = finalBalance;
+		
+		console.log(`🔒 Cerrando caja ${cashBox.name}:`);
+		console.log(`   - Monto inicial: ${cashBox.openingAmount}`);
+		console.log(`   - Saldo final calculado: ${finalBalance}`);
 		
 		// Si hay saldo positivo, marcarlo como pendiente
 		if (finalBalance > 0) {
 			cashBox.pendingBalance = finalBalance;
 			cashBox.pendingBalanceTransferred = false;
-			console.log(`💰 Caja ${cashBox.name} cerrada con saldo pendiente: ${finalBalance} soles`);
+			console.log(`   ⚠️ SALDO PENDIENTE: ${finalBalance} soles (no transferido)`);
 		} else {
 			cashBox.pendingBalance = 0;
 			cashBox.pendingBalanceTransferred = true;
-			console.log(`💰 Caja ${cashBox.name} cerrada sin saldo pendiente`);
+			console.log(`   ✅ Sin saldo pendiente`);
 		}
 		
 	} else if (status === 'reopened') {
@@ -218,13 +222,27 @@ export function computeCurrentAmount(cashBoxId: string): number {
 
 // Función para buscar la última caja con saldo pendiente
 export function findLastPendingBalance(currentDate: string): PendingBalance | null {
+	console.log(`🔍 Buscando saldos pendientes para fecha: ${currentDate}`);
+	console.log(`📦 Total de cajas en el sistema: ${mockCashBoxes.length}`);
+	
 	// Buscar cajas cerradas con saldo pendiente no transferido
-	const closedBoxes = mockCashBoxes.filter(cb => 
-		cb.status === 'closed' && 
-		cb.pendingBalance > 0 &&
-		cb.pendingBalanceTransferred === false &&
-		cb.businessDate < currentDate
-	);
+	const closedBoxes = mockCashBoxes.filter(cb => {
+		const isClosed = cb.status === 'closed';
+		const hasPendingBalance = cb.pendingBalance > 0;
+		const notTransferred = cb.pendingBalanceTransferred === false;
+		const isBeforeCurrentDate = cb.businessDate < currentDate;
+		
+		console.log(`   Caja ${cb.name} (${cb.businessDate}):`, {
+			isClosed,
+			hasPendingBalance: `${cb.pendingBalance} soles`,
+			notTransferred,
+			isBeforeCurrentDate
+		});
+		
+		return isClosed && hasPendingBalance && notTransferred && isBeforeCurrentDate;
+	});
+	
+	console.log(`📋 Cajas cerradas con saldo pendiente: ${closedBoxes.length}`);
 	
 	// Ordenar por fecha descendente (más reciente primero)
 	const sortedByDate = closedBoxes.sort((a, b) => 
@@ -251,11 +269,11 @@ export function findLastPendingBalance(currentDate: string): PendingBalance | nu
 			existingPending.amount = cashBox.pendingBalance;
 		}
 		
-		console.log(`🔍 Saldo pendiente encontrado: ${cashBox.pendingBalance} soles de ${cashBox.name}`);
+		console.log(`✅ SALDO PENDIENTE ENCONTRADO: ${cashBox.pendingBalance} soles de ${cashBox.name} (${cashBox.businessDate})`);
 		return existingPending;
 	}
 	
-	console.log(`🔍 No hay saldos pendientes para la fecha ${currentDate}`);
+	console.log(`❌ No hay saldos pendientes anteriores a ${currentDate}`);
 	return null;
 }
 
