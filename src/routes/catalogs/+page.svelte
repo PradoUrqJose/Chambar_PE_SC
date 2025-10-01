@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import type { PageData } from './$types';
 	import { CatalogTable } from '$lib/components';
 
@@ -79,6 +79,7 @@
 	let selectedItem = $state<any>(null);
 	let itemToDelete = $state<any>(null);
 	let editFormData = $state<any>({});
+	let successTimeout: NodeJS.Timeout | null = null;
 
 	// Estado para controlar carga lazy
 	let loadedCatalogs = $state({
@@ -100,12 +101,43 @@
 
 	// Manejar cambio de pestañas con carga lazy
 	async function handleTabChange(newTab: string) {
+		// Limpiar mensajes al cambiar de pestaña
+		clearMessages();
+		
 		activeTab = newTab;
 		currentPage = 1; // Reset pagination
 		
 		// Solo cargar si no ha sido cargado antes
 		if (!loadedCatalogs[newTab as keyof typeof loadedCatalogs]) {
 			await loadCurrentCatalog();
+		}
+	}
+
+	// Función para mostrar mensaje de éxito con auto-ocultar
+	function showSuccessMessage(message: string) {
+		successMessage = message;
+		errorMessage = ''; // Limpiar errores
+		
+		// Limpiar timeout anterior si existe
+		if (successTimeout) {
+			clearTimeout(successTimeout);
+		}
+		
+		// Auto-ocultar después de 3 segundos
+		successTimeout = setTimeout(() => {
+			successMessage = '';
+		}, 3000);
+	}
+
+	// Función para limpiar mensajes
+	function clearMessages() {
+		successMessage = '';
+		errorMessage = '';
+		
+		// Limpiar timeout si existe
+		if (successTimeout) {
+			clearTimeout(successTimeout);
+			successTimeout = null;
 		}
 	}
 
@@ -165,7 +197,7 @@
 			});
 
 			if (response.ok) {
-				successMessage = 'Elemento actualizado correctamente';
+				showSuccessMessage('Elemento actualizado correctamente');
 				await loadCurrentCatalog();
 				showEditModal = false;
 				selectedItem = null;
@@ -199,7 +231,7 @@
 			});
 
 			if (response.ok) {
-				successMessage = selectedItem ? 'Elemento actualizado correctamente' : 'Elemento creado correctamente';
+				showSuccessMessage(selectedItem ? 'Elemento actualizado correctamente' : 'Elemento creado correctamente');
 				await loadCurrentCatalog();
 				showCreateForm = false;
 				showEditModal = false;
@@ -233,7 +265,7 @@
 			console.log('📡 Delete response status:', response.status);
 
 			if (response.ok) {
-				successMessage = 'Elemento eliminado correctamente';
+				showSuccessMessage('Elemento eliminado correctamente');
 				await loadCurrentCatalog();
 				console.log('✅ Item deleted successfully');
 			} else {
@@ -499,6 +531,13 @@
 		loadCurrentCatalog();
 		// Marcar como cargado para evitar recarga innecesaria
 		loadedCatalogs.empresas = true;
+	});
+
+	// Limpiar timeout al desmontar
+	onDestroy(() => {
+		if (successTimeout) {
+			clearTimeout(successTimeout);
+		}
 	});
 </script>
 
