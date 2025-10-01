@@ -7,9 +7,10 @@
 		onClose: (id: string) => void;
 		onReopen: (cashBox: CashBox) => void;
 		onOpen: (id: string) => void;
+		onUpdateBalance?: () => void;
 	}
 
-	let { cashBox, currentAmount, onClose, onReopen, onOpen }: Props = $props();
+	let { cashBox, currentAmount, onClose, onReopen, onOpen, onUpdateBalance }: Props = $props();
 
 	// Función para formatear fecha en zona horaria de Perú
 	function formatDatePeru(dateStr: string): string {
@@ -73,7 +74,7 @@
 					S/. {currentAmount.toFixed(2)}
 				</div>
 				<button
-					onclick={() => onReopen(cashBox)}
+					onclick={() => onUpdateBalance?.()}
 					class="bg-blue-600 text-white border-none rounded-[10px] px-[18px] py-2.5 text-[15px] font-semibold cursor-pointer flex items-center gap-1.5 transition-all duration-200 hover:bg-blue-700 hover:scale-105"
 				>
 					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

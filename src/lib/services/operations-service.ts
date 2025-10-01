@@ -32,12 +32,31 @@ export async function getOperations(platform: App.Platform, date?: string): Prom
 	
 	// Si no hay base de datos (desarrollo local), usar datos mock
 	if (!db) {
-		let operations = mockOperations as Operation[];
+		// Crear una copia fresca de mockOperations para asegurar datos actualizados
+		let operations = [...mockOperations] as Operation[];
+		
+		console.log('🔍 getOperations - All mock operations:', operations.map(op => ({
+			id: op.id,
+			description: op.description,
+			businessDate: op.businessDate,
+			cashBoxId: op.cashBoxId,
+			amount: op.amount
+		})));
 		
 		// Filtrar por fecha si se proporciona (usando zona horaria de Perú)
 		if (date) {
+			console.log('🔍 getOperations - Filtering by date:', date);
 			operations = operations.filter(op => op.businessDate === date);
+			console.log('🔍 getOperations - Filtered operations:', operations.map(op => ({
+				id: op.id,
+				description: op.description,
+				businessDate: op.businessDate,
+				cashBoxId: op.cashBoxId,
+				amount: op.amount
+			})));
 		}
+		
+		console.log('🔍 getOperations - Returning operations:', operations.length);
 		
 		return operations;
 	}

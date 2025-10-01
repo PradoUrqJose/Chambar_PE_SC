@@ -9,6 +9,8 @@ interface MockCashBox {
 	name: string;
 	status: 'open' | 'closed' | 'reopened' | 'empty';
 	openingAmount: number;
+	pendingBalance: number; // ← Nuevo campo
+	pendingBalanceHandled: boolean; // ← Nuevo campo
 	openedAt: string | null;
 	originalOpenedAt: string | null;
 	closedAt: string | null;
@@ -18,12 +20,25 @@ interface MockCashBox {
 	updatedAt: string;
 }
 
+// Estructura para saldos pendientes
+export interface PendingBalance {
+	id: string;
+	cashBoxId: string;
+	amount: number;
+	date: string;
+	status: 'pending' | 'transferred' | 'returned' | 'handled';
+	handledAt?: string;
+	notes?: string;
+}
+
 export const mockCashBoxes: MockCashBox[] = [
 	{
 		id: '1',
 		name: 'Caja Principal',
 		status: 'empty', // Estado unificado - disponible para abrir
 		openingAmount: 0.00, // Sin monto inicial
+		pendingBalance: 0.00, // ← Nuevo campo
+		pendingBalanceHandled: true, // ← Nuevo campo
 		openedAt: null as string | null, // No abierta
 		originalOpenedAt: null as string | null,
 		closedAt: null as string | null,
@@ -37,6 +52,8 @@ export const mockCashBoxes: MockCashBox[] = [
 		name: 'Caja 27 Septiembre',
 		status: 'closed', // Estado unificado
 		openingAmount: 200.00,
+		pendingBalance: 0.00, // ← Sin saldo pendiente (ya manejado)
+		pendingBalanceHandled: true, // ← Ya manejado
 		openedAt: '2025-09-27T05:00:00.000Z', // 27-09-2025 00:00 Perú
 		originalOpenedAt: '2025-09-27T05:00:00.000Z', // 27-09-2025 00:00 Perú
 		closedAt: '2025-09-27T13:00:00.000Z', // 27-09-2025 08:00 Perú
@@ -50,6 +67,8 @@ export const mockCashBoxes: MockCashBox[] = [
 		name: 'Caja 30 Septiembre',
 		status: 'closed', // Estado unificado
 		openingAmount: 150.00,
+		pendingBalance: 288.00, // ← Saldo pendiente de 288 soles (calculado correctamente)
+		pendingBalanceHandled: false, // ← No manejado aún
 		openedAt: '2025-09-30T05:00:00.000Z', // 30-09-2025 00:00 Perú
 		originalOpenedAt: '2025-09-30T05:00:00.000Z', // 30-09-2025 00:00 Perú
 		closedAt: '2025-09-30T13:00:00.000Z', // 30-09-2025 08:00 Perú
@@ -109,6 +128,8 @@ export function addMockCashBox(name: string) {
 		name,
 		status: 'empty' as const,
 		openingAmount: 0,
+		pendingBalance: 0.00,
+		pendingBalanceHandled: true,
 		openedAt: null as string | null,
 		originalOpenedAt: null as string | null,
 		closedAt: null as string | null,
@@ -484,15 +505,6 @@ export function addMockOperation(data: any, createdAt?: string, updatedAt?: stri
 	// Obtener la caja para usar su businessDate
 	const cashBox = mockCashBoxes.find(cb => cb.id === data.cashBoxId);
 	const businessDate = cashBox?.businessDate || toBusinessDate(createdAt || new Date().toISOString());
-	
-	console.log('🔄 Adding mock operation:', {
-		cashBoxId: data.cashBoxId,
-		cashBoxName: cashBox?.name,
-		businessDate: businessDate,
-		amount: data.amount,
-		type: data.type
-	});
-	
 	const newOperation = {
 		id: 'mock-op-' + Date.now(),
 		type: data.type,
@@ -511,17 +523,18 @@ export function addMockOperation(data: any, createdAt?: string, updatedAt?: stri
 	return newOperation;
 }
 
-// Función para calcular saldo derivado (eliminando currentAmount persistido)
+// Función para calcular saldo derivado (solo suma de operaciones)
 export function computeCurrentAmount(cashBoxId: string): number {
 	const cashBox = mockCashBoxes.find(cb => cb.id === cashBoxId);
 	if (!cashBox) return 0;
 	
 	const operations = mockOperations.filter(op => op.cashBoxId === cashBoxId);
-	const delta = operations.reduce((acc, op) => {
+	const total = operations.reduce((acc, op) => {
 		return acc + (op.type === 'income' ? op.amount : -op.amount);
 	}, 0);
 	
-	return cashBox.openingAmount + delta;
+	// NO sumar openingAmount - ya está incluido en las operaciones de apertura
+	return total;
 }
 
 // Función para agregar nuevo stand mock
@@ -571,7 +584,6 @@ export function addMockOperationDetail(name: string, type: 'income' | 'expense',
 // Ahora usamos saldo derivado con computeCurrentAmount()
 export async function updateMockCashBoxAmount(cashBoxId: string, amount: number, type: 'income' | 'expense') {
 	// Esta función ya no es necesaria con saldo derivado
-	console.log(`Operación ${type} de ${amount} para caja ${cashBoxId} - Saldo derivado: ${computeCurrentAmount(cashBoxId)}`);
 }
 
 // Función para agregar nueva empresa mock
@@ -599,7 +611,6 @@ export function updateMockCompany(id: string, razonSocial?: string, ruc?: string
 		mockCompany.ruc = ruc;
 	}
 	mockCompany.updatedAt = new Date().toISOString();
-	console.log(`Empresa actualizada: ${mockCompany.razonSocial} - ${mockCompany.ruc}`);
 }
 
 export const mockCompanies = [
@@ -614,3 +625,196 @@ export const mockCompanies = [
 
 // Mantener compatibilidad con código existente
 export const mockCompany = mockCompanies[0];
+
+// Array de saldos pendientes
+export const mockPendingBalances: PendingBalance[] = [
+	{
+		id: 'pending-1',
+		cashBoxId: '3', // Caja 30 Septiembre
+		amount: 288.00, // ← Saldo correcto de 288 soles
+		date: '2025-09-30', // ← Fecha correcta
+		status: 'pending',
+		notes: 'Saldo pendiente de caja cerrada el 30/09'
+	}
+];
+
+// Función de debug para verificar datos
+export function debugPendingBalanceData() {
+	console.log('📊 mockCashBoxes:', mockCashBoxes.map(cb => ({
+		id: cb.id,
+		name: cb.name,
+		businessDate: cb.businessDate,
+		pendingBalance: cb.pendingBalance,
+		pendingBalanceHandled: cb.pendingBalanceHandled
+	})));
+	console.log('📊 mockPendingBalances:', mockPendingBalances);
+}
+
+// Función para buscar la última caja anterior con saldo pendiente
+export function findLastPendingBalance(currentDate: string): PendingBalance | null {
+	// 1. Obtener todas las cajas cerradas con saldo pendiente
+	const closedBoxesWithPending = mockCashBoxes.filter(cb => 
+		cb.status === 'closed' && 
+		cb.pendingBalance > 0 &&
+		cb.pendingBalanceHandled === false &&
+		cb.businessDate && 
+		cb.businessDate < currentDate // ← CLAVE: Solo anteriores
+	);
+	
+	// 2. Ordenar por fecha descendente (más reciente primero)
+	const sortedByDate = closedBoxesWithPending.sort((a, b) => 
+		new Date(b.businessDate!).getTime() - new Date(a.businessDate!).getTime()
+	);
+	
+	// 3. Retornar la más reciente (última caja anterior con saldo pendiente)
+	const lastBox = sortedByDate[0];
+	if (!lastBox) return null;
+	
+	// 4. Buscar el saldo pendiente correspondiente
+	return mockPendingBalances.find(pb => 
+		pb.cashBoxId === lastBox.id && 
+		pb.status === 'pending'
+	) || null;
+}
+
+// Función para validar que el saldo sea de una fecha anterior
+export function validatePendingBalance(pendingBalance: PendingBalance, currentDate: string): boolean {
+	const pendingDate = pendingBalance.date;
+	const current = new Date(currentDate);
+	const pending = new Date(pendingDate);
+	
+	// Solo permitir saldos de fechas anteriores
+	return pending < current;
+}
+
+// Función para marcar saldo pendiente como manejado
+export function markPendingBalanceAsHandled(pendingBalanceId: string, action: 'transferred' | 'returned' | 'handled', notes?: string) {	
+	const pendingBalance = mockPendingBalances.find(pb => pb.id === pendingBalanceId);
+	if (pendingBalance) {		
+		// Actualizar el saldo pendiente
+		pendingBalance.status = action;
+		pendingBalance.handledAt = new Date().toISOString();
+		if (notes) pendingBalance.notes = notes;
+		
+		// Marcar la caja como manejada
+		const cashBox = mockCashBoxes.find(cb => cb.id === pendingBalance.cashBoxId);
+		if (cashBox) {
+			cashBox.pendingBalanceHandled = true;
+			cashBox.pendingBalance = 0; // Resetear el saldo pendiente
+		} else {
+			console.error('❌ Cash box not found for pending balance:', pendingBalance.cashBoxId);
+		}
+	} else {
+		console.error('❌ Pending balance not found:', pendingBalanceId);
+	}
+}
+
+// Función para transferir saldo pendiente a caja actual
+export function transferPendingBalanceToCurrentBox(pendingBalanceId: string, currentCashBoxId: string) {	
+	const pendingBalance = mockPendingBalances.find(pb => pb.id === pendingBalanceId);
+	if (pendingBalance) {		
+		// Marcar como transferido
+		pendingBalance.status = 'transferred';
+		pendingBalance.handledAt = new Date().toISOString();
+		pendingBalance.notes = `Transferido a caja ${currentCashBoxId}`;
+		
+		// Marcar la caja original como manejada y crear operación de egreso
+		const originalCashBox = mockCashBoxes.find(cb => cb.id === pendingBalance.cashBoxId);
+		if (originalCashBox) {
+			originalCashBox.pendingBalanceHandled = true;
+			originalCashBox.pendingBalance = 0; // Resetear el saldo pendiente
+			
+			// Crear operación de EGRESO en la caja original (transferencia de saldo pendiente)
+			const transferOutOperation = {
+				id: `transfer-out-${Date.now()}`,
+				type: 'expense' as const,
+				amount: pendingBalance.amount,
+				description: `Transferencia de saldo pendiente a caja ${currentCashBoxId}`,
+				cashBoxId: pendingBalance.cashBoxId,
+				businessDate: originalCashBox.businessDate || new Date().toISOString().split('T')[0],
+				companyId: null,
+				operationDetailId: null,
+				responsiblePersonId: null,
+				standId: null,
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString()
+			};
+			
+			// Agregar la operación de egreso a mockOperations
+			mockOperations.push(transferOutOperation);
+			console.log('💰 TRANSFER OUT operation created:', transferOutOperation);
+
+		} else {
+			console.error('❌ Original cash box not found:', pendingBalance.cashBoxId);
+		}
+		
+		// Agregar el monto a la caja actual
+		const currentCashBox = mockCashBoxes.find(cb => cb.id === currentCashBoxId);
+		if (currentCashBox) {
+			currentCashBox.openingAmount += pendingBalance.amount;
+			// Crear operación de INGRESO en la caja actual (transferencia de saldo pendiente)
+			const transferInOperation = {
+				id: `transfer-in-${Date.now()}`,
+				type: 'income' as const,
+				amount: pendingBalance.amount,
+				description: `Transferencia de saldo pendiente desde caja ${pendingBalance.cashBoxId}`,
+				cashBoxId: currentCashBoxId,
+				businessDate: currentCashBox.businessDate || new Date().toISOString().split('T')[0],
+				companyId: null,
+				operationDetailId: null,
+				responsiblePersonId: null,
+				standId: null,
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString()
+			};
+			
+			// Agregar la operación de ingreso a mockOperations
+			mockOperations.push(transferInOperation);
+			console.log('💰 TRANSFER IN operation created:', transferInOperation);
+			
+			// Verificación específica de la caja modificada
+			const modifiedBox = mockCashBoxes.find(cb => cb.id === currentCashBoxId);
+		} else {
+			console.error('❌ Current cash box not found:', currentCashBoxId);
+		}
+	} else {
+		console.error('❌ Pending balance not found:', pendingBalanceId);
+	}
+}
+
+// Función para agregar operaciones de apertura a todas las cajas existentes
+export function addOpeningOperationsToAllBoxes() {
+	
+	mockCashBoxes.forEach(cashBox => {
+		// Solo agregar operación de apertura si la caja tiene monto inicial y no tiene operación de apertura
+		if (cashBox.openingAmount > 0) {
+			const hasOpeningOperation = mockOperations.some(op => 
+				op.cashBoxId === cashBox.id && 
+				op.description.includes('Apertura de caja')
+			);
+			
+			if (!hasOpeningOperation) {
+				const openingOperation = {
+					id: `opening-${cashBox.id}-${Date.now()}`,
+					type: 'income' as const,
+					amount: cashBox.openingAmount,
+					description: `Apertura de caja - Monto inicial`,
+					cashBoxId: cashBox.id,
+					businessDate: cashBox.businessDate || new Date().toISOString().split('T')[0],
+					companyId: null,
+					operationDetailId: null,
+					responsiblePersonId: null,
+					standId: null,
+					createdAt: cashBox.openedAt || new Date().toISOString(),
+					updatedAt: cashBox.updatedAt || new Date().toISOString()
+				};
+				
+				mockOperations.unshift(openingOperation);
+			}
+		}
+	});
+	
+}
+
+// Agregar operaciones de apertura a todas las cajas al cargar
+addOpeningOperationsToAllBoxes();

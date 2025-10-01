@@ -27,7 +27,29 @@ export async function getCashBoxes(platform: App.Platform): Promise<CashBox[]> {
 	
 	// Si no hay base de datos (desarrollo local), usar datos mock
 	if (!db) {
-		return mockCashBoxes as CashBox[];
+		// Crear una copia fresca de los datos para asegurar que se devuelvan los datos actualizados
+		const freshData = mockCashBoxes.map(cb => ({
+			id: cb.id,
+			name: cb.name,
+			status: cb.status as CashBoxStatus,
+			openingAmount: cb.openingAmount,
+			openedAt: cb.openedAt,
+			originalOpenedAt: cb.originalOpenedAt,
+			closedAt: cb.closedAt,
+			reopenedAt: cb.reopenedAt,
+			businessDate: cb.businessDate,
+			createdAt: cb.createdAt,
+			updatedAt: cb.updatedAt
+		}));
+		
+		console.log('🔍 getCashBoxes returning fresh mock data:', freshData.map(cb => ({
+			id: cb.id,
+			name: cb.name,
+			openingAmount: cb.openingAmount,
+			status: cb.status
+		})));
+		console.log('🔍 Caja Principal openingAmount:', freshData.find(cb => cb.id === '1')?.openingAmount);
+		return freshData;
 	}
 	
 	return await executeQuery<CashBox>(
@@ -69,6 +91,29 @@ export async function openCashBox(
 	if (!db) {
 		console.log('Modo desarrollo: simulando apertura de caja');
 		updateMockCashBoxStatus(id, 'open', openingAmount, openedAt, estado);
+		
+		// Crear operación de apertura de caja si hay monto inicial
+		if (openingAmount > 0) {
+			const { addMockOperation } = await import('$lib/db/mock-data');
+			const cashBox = mockCashBoxes.find(cb => cb.id === id);
+			if (cashBox) {
+				// Crear operación de apertura de caja
+				const description = `Apertura de caja - Monto inicial`;
+				
+				addMockOperation({
+					type: 'income',
+					amount: openingAmount,
+					description: description,
+					cashBoxId: id,
+					companyId: null,
+					operationDetailId: null,
+					responsiblePersonId: null,
+					standId: null
+				});
+				console.log('💰 Opening operation created for amount:', openingAmount);
+			}
+		}
+		
 		return { success: true };
 	}
 	

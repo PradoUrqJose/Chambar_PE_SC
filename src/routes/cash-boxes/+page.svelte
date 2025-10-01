@@ -9,8 +9,17 @@
 		CashBoxActions,
 		ReopenConfirmationModal 
 	} from '$lib/components';
+	import PendingBalanceModal from '$lib/components/PendingBalanceModal.svelte';
 	import type { CashBox } from '$lib/services/cash-boxes-service';
 	import type { Operation } from '$lib/services/operations-service';
+	import { 
+		findLastPendingBalance, 
+		validatePendingBalance, 
+		markPendingBalanceAsHandled, 
+		transferPendingBalanceToCurrentBox,
+		debugPendingBalanceData,
+		mockCashBoxes
+	} from '$lib/db/mock-data';
 
 	let { data } = $props<{ data: PageData }>();
 	
@@ -35,6 +44,8 @@
 	let showOperationsModal = $state(false);
 	let showReopenConfirmation = $state(false);
 	let cashBoxToReopen = $state<CashBox | null>(null);
+	let showPendingBalanceModal = $state(false);
+	let pendingBalance = $state<any>(null);
 	
 	// Estados para tabla
 	let rowsPerPage = $state(5);
@@ -64,7 +75,7 @@
 		}
 	}
 
-	// Función para calcular saldo derivado (eliminando currentAmount persistido)
+	// Función para calcular saldo derivado (solo suma de operaciones)
 	async function computeCurrentAmount(cashBoxId: string): Promise<number> {
 		const cashBox = cashBoxes.find(cb => cb.id === cashBoxId);
 		if (!cashBox) return 0;
@@ -72,11 +83,12 @@
 		// Obtener TODAS las operaciones de la caja, no solo las renderizadas
 		const allOperations = await getAllOperationsForCashBox(cashBoxId, currentDate);
 		const operationsForBox = allOperations.filter(op => op.cashBoxId === cashBoxId);
-		const delta = operationsForBox.reduce((acc, op) => {
+		const total = operationsForBox.reduce((acc, op) => {
 			return acc + (op.type === 'income' ? op.amount : -op.amount);
 		}, 0);
 		
-		return cashBox.openingAmount + delta;
+		// NO sumar openingAmount - ya está incluido en las operaciones de apertura
+		return total;
 	}
 
 	// Función para obtener caja para la fecha actual
@@ -130,26 +142,31 @@
 
 	// Función para cargar operaciones para una fecha
 	async function loadOperationsForDate(date: Date, showLoading: boolean = true) {
-		console.log('🔄 loadOperationsForDate called with date:', date);
 		if (showLoading) isLoading = true;
 		
 		try {
 			const dateStr = toPeruDateString(date);
-			console.log('📅 Date string for API:', dateStr);
+			console.log('🔍 loadOperationsForDate - Requesting operations for date:', dateStr);
 			const response = await fetch(`/api/operations?date=${dateStr}&limit=${rowsPerPage}`);
-			console.log('📡 Operations API response status:', response.status);
 			
 			if (response.ok) {
 				const data = await response.json();
-				console.log('✅ Operations loaded:', data);
 				operations = data;
+				// Forzar reactividad actualizando el array derivado
+				operationsArray = data.operations || [];
+				console.log('🔄 OPERACIONES CARGADAS:', {
+					total: data.operations?.length || 0,
+					operations: data.operations?.map((op: any) => ({ id: op.id, description: op.description, amount: op.amount }))
+				});
 			} else {
 				console.error('❌ Error loading operations:', response.statusText);
 				operations = [];
+				operationsArray = [];
 			}
 		} catch (error) {
 			console.error('💥 Error loading operations:', error);
 			operations = [];
+			operationsArray = [];
 		} finally {
 			if (showLoading) isLoading = false;
 		}
@@ -157,14 +174,11 @@
 
 	// Función para cargar cajas
 	async function loadCashBoxes() {
-		console.log('🏦 loadCashBoxes called');
 		try {
 			const response = await fetch('/api/cash-boxes');
-			console.log('📡 Cash boxes API response status:', response.status);
 			
 			if (response.ok) {
 				const data = await response.json();
-				console.log('✅ Cash boxes loaded:', data);
 				cashBoxes = data;
 				updateCurrentOpenCashBox();
 			} else {
@@ -177,10 +191,7 @@
 
 	// Función para cargar datos de catálogos
 	async function loadSelectData() {
-		console.log('📋 loadSelectData called');
-		try {
-			console.log('🔄 Starting to fetch catalog data...');
-			
+		try {			
 			const [detailsRes, personsRes, standsRes, companiesRes] = await Promise.all([
 				fetch('/api/catalogs/operation-details'),
 				fetch('/api/catalogs/responsible-persons'),
@@ -188,18 +199,9 @@
 				fetch('/api/companies') // Usar el endpoint real de empresas
 			]);
 
-			console.log('📋 Select data API responses:', {
-				details: detailsRes.status,
-				persons: personsRes.status,
-				stands: standsRes.status,
-				companies: companiesRes.status
-			});
-
 			// Detalles de operación
 			if (detailsRes.ok) {
 				operationDetails = await detailsRes.json();
-				console.log('📊 Operation details loaded:', operationDetails);
-				console.log('📊 Operation details count:', operationDetails.length);
 			} else {
 				console.error('❌ Failed to load operation details:', detailsRes.status, detailsRes.statusText);
 			}
@@ -207,8 +209,6 @@
 			// Responsables
 			if (personsRes.ok) {
 				responsiblePersons = await personsRes.json();
-				console.log('📊 Responsible persons loaded:', responsiblePersons);
-				console.log('📊 Responsible persons count:', responsiblePersons.length);
 			} else {
 				console.error('❌ Failed to load responsible persons:', personsRes.status, personsRes.statusText);
 			}
@@ -216,22 +216,15 @@
 			// Stands
 			if (standsRes.ok) {
 				stands = await standsRes.json();
-				console.log('📊 Stands loaded:', stands);
-				console.log('📊 Stands count:', stands.length);
 			} else {
 				console.error('❌ Failed to load stands:', standsRes.status, standsRes.statusText);
 			}
 
 			// Empresas
 			if (companiesRes.ok) {
-				const companiesData = await companiesRes.json();
-				console.log('📊 Raw companies data from API:', companiesData);
-				console.log('📊 Raw companies data type:', typeof companiesData);
-				console.log('📊 Raw companies data length:', Array.isArray(companiesData) ? companiesData.length : 'Not an array');
-				
+				const companiesData = await companiesRes.json();				
 				// Mapear los datos de empresas del formato real al formato esperado
 				companies = companiesData.map((company: any) => {
-					console.log('🔄 Mapping company:', company);
 					return {
 						id: company.id,
 						name: company.razonSocial || company.name,
@@ -241,17 +234,9 @@
 						email: company.email || ''
 					};
 				});
-				console.log('📊 Mapped companies:', companies);
-				console.log('📊 Mapped companies count:', companies.length);
 			} else {
 				console.error('❌ Failed to load companies:', companiesRes.status, companiesRes.statusText);
 			}
-			
-			console.log('✅ Select data loaded successfully');
-			console.log('📊 Final state - operationDetails:', operationDetails.length);
-			console.log('📊 Final state - responsiblePersons:', responsiblePersons.length);
-			console.log('📊 Final state - stands:', stands.length);
-			console.log('📊 Final state - companies:', companies.length);
 		} catch (error) {
 			console.error('💥 Error loading select data:', error);
 		}
@@ -268,12 +253,46 @@
 	async function openCashBox() {
 		if (!selectedCashBoxId || openingAmount < 0) return;
 
+		try {			
+			// Verificar si hay saldo pendiente antes de abrir
+			const currentDateStr = toPeruDateString(currentDate);
+			const lastPendingBalance = findLastPendingBalance(currentDateStr);
+			
+			if (lastPendingBalance && validatePendingBalance(lastPendingBalance, currentDateStr)) {
+				// Mostrar modal de saldo pendiente
+				pendingBalance = lastPendingBalance;
+				showPendingBalanceModal = true;
+				return; // No abrir la caja hasta que se maneje el saldo pendiente
+			}
+
+			// Si no hay saldo pendiente, abrir caja normalmente
+			await openCashBoxDirectly();
+		} catch (error) {
+			console.error('Error opening cash box:', error);
+			errorMessage = 'Error al abrir la caja';
+		}
+	}
+
+	// Función para abrir caja directamente (sin verificar saldos pendientes)
+	async function openCashBoxDirectly() {
 		try {
+			// Validar que selectedCashBoxId no esté vacío
+			if (!selectedCashBoxId) {
+				console.error('❌ selectedCashBoxId is empty, cannot open cash box');
+				errorMessage = 'Error: No se ha seleccionado una caja para abrir';
+				return;
+			}
+			
+			// Obtener el openingAmount actualizado directamente de mockCashBoxes
+			const mockCashBox = mockCashBoxes.find(cb => cb.id === selectedCashBoxId);
+			const currentCashBox = cashBoxes.find(cb => cb.id === selectedCashBoxId);
+			const actualOpeningAmount = mockCashBox?.openingAmount || currentCashBox?.openingAmount || openingAmount;
+			
 			const response = await fetch(`/api/cash-boxes/${selectedCashBoxId}/open`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ 
-					openingAmount,
+					openingAmount: actualOpeningAmount,
 					openedAt: new Date().toISOString()
 				})
 			});
@@ -281,7 +300,7 @@
 			if (response.ok) {
 				await loadCashBoxes();
 				showOpenForm = false;
-				selectedCashBoxId = '';
+				selectedCashBoxId = ''; // Limpiar después de abrir exitosamente
 				openingAmount = 0;
 			} else {
 				const error = await response.json();
@@ -357,19 +376,12 @@
 				return;
 			}
 
-			console.log('🔄 Creating operation for cash box:', cashBoxForDate.name);
-			console.log('🔄 Current date:', currentDate);
-			console.log('🔄 Operation data from modal:', operationData);
-
 			const finalOperationData = {
 				...operationData,
 				cashBoxId: cashBoxForDate.id,
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString()
 			};
-
-			console.log('🔄 Final operation data:', finalOperationData);
-
 			const response = await fetch('/api/operations', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -377,7 +389,6 @@
 			});
 
 			if (response.ok) {
-				console.log('✅ Operation created successfully');
 				await loadOperationsForDate(currentDate, false);
 				// Actualizar el monto actual después de crear la operación
 				await updateCurrentAmount();
@@ -401,23 +412,14 @@
 
 	// Inicialización
 	onMount(async () => {
-		console.log('🚀 Component mounted, starting data loading...');
-		console.log('📅 Current date:', currentDate);
 		
 		try {
 			// Cargar datos secuencialmente para debug
-			console.log('1️⃣ Loading cash boxes...');
 			await loadCashBoxes();
 			
-			console.log('2️⃣ Loading operations...');
 			await loadOperationsForDate(currentDate, false);
 			
-			console.log('3️⃣ Loading select data...');
 			await loadSelectData();
-			
-			console.log('📊 Final state - cashBoxes count:', cashBoxes.length);
-			console.log('📊 Final state - operations count:', operationsArray.length);
-			console.log('📊 Final state - cashBoxForDate:', cashBoxForDate ? cashBoxForDate.name : 'null');
 			
 			updateNavigationState();
 			
@@ -425,10 +427,8 @@
 			await updateCurrentAmount();
 			
 			isLoading = false;
-			console.log('✅ Data loading completed - isLoading set to false');
-			console.log('🔍 Final isLoading state:', isLoading);
+
 		} catch (error) {
-			console.error('💥 Error in onMount:', error);
 			isLoading = false; // Asegurar que se quite el loading incluso si hay error
 		}
 	});
@@ -437,7 +437,7 @@
 	let cashBoxForDate = $derived(getCashBoxForDate(currentDate));
 	
 	// Obtener array de operaciones (manejar tanto array directo como objeto con operations)
-	let operationsArray = $derived(Array.isArray(operations) ? operations : operations.operations || []);
+	let operationsArray = $derived(Array.isArray(operations) ? operations : (operations as any)?.operations || []);
 	
 	// Variable para el monto actual de la caja
 	let currentAmount = $state(0);
@@ -446,14 +446,93 @@
 	async function updateCurrentAmount() {
 		if (cashBoxForDate) {
 			currentAmount = await computeCurrentAmount(cashBoxForDate.id);
-			console.log('💰 Current amount updated:', currentAmount);
+			console.log('💰 CURRENT AMOUNT UPDATED:', currentAmount);
 		}
 	}
 	
 	// Función para manejar el botón "Actualizar Balance"
 	async function handleUpdateBalance() {
-		console.log('🔄 Manual balance update requested');
 		await updateCurrentAmount();
+	}
+
+	// Función para manejar la confirmación del saldo pendiente
+	async function handlePendingBalanceConfirm(event: any) {
+		const { action, notes, pendingBalanceId } = event;
+		
+		try {
+			if (action === 'transfer') {
+				// Preservar selectedCashBoxId antes de la transferencia
+				const preservedCashBoxId = selectedCashBoxId;
+				transferPendingBalanceToCurrentBox(pendingBalanceId, preservedCashBoxId);
+				
+				// Recargar datos para reflejar cambios
+				await loadCashBoxes();
+				await loadOperationsForDate(currentDate); // Recargar operaciones
+				await updateCurrentAmount();
+				
+				// Forzar reactividad explícitamente
+				operations = {...operations};
+				
+				console.log('🔄 AFTER TRANSFER - operationsArray:', operationsArray.length);
+				console.log('🔄 AFTER TRANSFER - currentAmount:', currentAmount);
+				
+				// Restaurar selectedCashBoxId después de la recarga
+				selectedCashBoxId = preservedCashBoxId;				
+				
+				const updatedCashBox = cashBoxes.find(cb => cb.id === selectedCashBoxId);
+				
+				// Abrir la caja con el saldo transferido
+				await openCashBoxDirectly();
+			} else if (action === 'return') {
+				// Preservar selectedCashBoxId antes de la acción
+				const preservedCashBoxId = selectedCashBoxId;
+				// Devolver a tesorería
+				markPendingBalanceAsHandled(pendingBalanceId, 'returned', notes);
+				// Recargar datos para reflejar cambios
+				await loadCashBoxes();
+				await loadOperationsForDate(currentDate); // Recargar operaciones
+				await updateCurrentAmount();
+				// Forzar reactividad explícitamente
+				operations = {...operations};
+				// Restaurar selectedCashBoxId después de la recarga
+				selectedCashBoxId = preservedCashBoxId;
+				// Abrir la caja normalmente
+				await openCashBoxDirectly();
+			} else if (action === 'handle') {
+				// Preservar selectedCashBoxId antes de la acción
+				const preservedCashBoxId = selectedCashBoxId;
+				// Marcar como manejado externamente
+				markPendingBalanceAsHandled(pendingBalanceId, 'handled', notes);
+				// Recargar datos para reflejar cambios
+				await loadCashBoxes();
+				await loadOperationsForDate(currentDate); // Recargar operaciones
+				await updateCurrentAmount();
+				// Forzar reactividad explícitamente
+				operations = {...operations};
+				// Restaurar selectedCashBoxId después de la recarga
+				selectedCashBoxId = preservedCashBoxId;
+				// Abrir la caja normalmente
+				await openCashBoxDirectly();
+			}
+			
+			// Cerrar modal de saldo pendiente
+			showPendingBalanceModal = false;
+			pendingBalance = null;
+			// No limpiar selectedCashBoxId aquí, se limpiará en openCashBoxDirectly
+		} catch (error) {
+			console.error('Error handling pending balance:', error);
+			errorMessage = 'Error al procesar el saldo pendiente';
+		}
+	}
+
+	// Función para cerrar el modal de saldo pendiente
+	function handlePendingBalanceClose() {
+		showPendingBalanceModal = false;
+		pendingBalance = null;
+		// Cerrar también el modal de apertura de caja
+		showOpenForm = false;
+		selectedCashBoxId = '';
+		openingAmount = 0;
 	}
 </script>
 
@@ -616,5 +695,13 @@
 			showReopenConfirmation = false;
 			cashBoxToReopen = null;
 		}}
+	/>
+
+	<!-- Modal de saldo pendiente -->
+	<PendingBalanceModal
+		isOpen={showPendingBalanceModal}
+		pendingBalance={pendingBalance}
+		onClose={handlePendingBalanceClose}
+		onConfirm={handlePendingBalanceConfirm}
 	/>
 </div>
