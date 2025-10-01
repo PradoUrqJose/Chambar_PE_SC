@@ -1,104 +1,31 @@
-// Endpoint para gestionar responsables
-// GET /api/catalogs/responsible-persons - Obtener responsables
-// POST /api/catalogs/responsible-persons - Crear responsable
-
 import { json } from '@sveltejs/kit';
+import { getResponsiblePersons, createResponsiblePerson } from '$lib/services/responsible-persons-service';
 import type { RequestHandler } from './$types';
-import { getD1Database } from '$lib/server/db/d1';
-import { responsiblePersons } from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
-import { createResponsiblePerson } from '$lib/server/catalogs/catalogs-service';
-import { z } from 'zod';
-import { mockData } from '$lib/server/dev-fallback';
 
-// Esquema de validación para crear responsable
-const responsiblePersonSchema = z.object({
-	name: z.string().min(1, 'El nombre es requerido'),
-	email: z.string().email('Email inválido').optional().or(z.literal('')),
-	phone: z.string().optional()
-});
-
-export const GET: RequestHandler = async ({ locals, platform }) => {
-	// Verificar autenticación
-	if (!locals.user) {
-		return json({ success: false, error: 'No autorizado' }, { status: 401 });
-	}
-	
-	// Fallback para desarrollo local - forzar modo desarrollo
-	const isLocalDev = true; // Forzar modo desarrollo por ahora
-	
-	if (isLocalDev) {
-		console.log('🔧 Modo desarrollo - retornando responsables mock');
-		return json({ success: true, data: mockData.responsiblePersons });
-	}
-	
+export const GET: RequestHandler = async ({ platform }) => {
 	try {
-		const db = getD1Database(platform);
-		
-		const responsibles = await db
-			.select()
-			.from(responsiblePersons)
-			.where(eq(responsiblePersons.active, true));
-		
-		return json({
-			success: true,
-			data: responsibles
-		});
-		
+		console.log('GET /api/catalogs/responsible-persons - Iniciando...');
+		const responsiblePersons = await getResponsiblePersons(platform);
+		console.log('GET /api/catalogs/responsible-persons - Datos obtenidos:', responsiblePersons);
+		return json(responsiblePersons);
 	} catch (error) {
-		console.error('Error obteniendo responsables:', error);
-		return json({
-			success: false,
-			error: 'Error interno del servidor'
-		}, { status: 500 });
+		console.error('Error getting responsible persons:', error);
+		return json({ error: 'Error al obtener los responsables' }, { status: 500 });
 	}
 };
 
-export const POST: RequestHandler = async ({ request, locals, platform }) => {
-	// Verificar autenticación
-	if (!locals.user) {
-		return json({ success: false, error: 'No autorizado' }, { status: 401 });
-	}
-	
-	// Verificar permisos (solo admin)
-	if (locals.user.role !== 'admin') {
-		return json({ success: false, error: 'Sin permisos' }, { status: 403 });
-	}
-	
+export const POST: RequestHandler = async ({ request, platform }) => {
 	try {
-		const body = await request.json();
-		
-		// Validar datos
-		const validationResult = responsiblePersonSchema.safeParse(body);
-		if (!validationResult.success) {
-			return json({
-				success: false,
-				error: 'Datos inválidos',
-				details: validationResult.error.flatten().fieldErrors
-			}, { status: 400 });
-		}
-		
-		const responsibleData = validationResult.data;
-		
-		// Limpiar email vacío
-		if (responsibleData.email === '') {
-			responsibleData.email = undefined;
-		}
-		
-		// Crear responsable
-		const result = await createResponsiblePerson(platform, responsibleData);
+		const data = await request.json();
+		const result = await createResponsiblePerson(platform, data);
 		
 		if (result.success) {
-			return json(result);
+			return json({ message: 'Responsable creado correctamente', id: result.id });
 		} else {
-			return json(result, { status: 400 });
+			return json({ error: result.error || 'Error al crear el responsable' }, { status: 500 });
 		}
-		
 	} catch (error) {
-		console.error('Error en endpoint de responsables:', error);
-		return json({
-			success: false,
-			error: 'Error interno del servidor'
-		}, { status: 500 });
+		console.error('Error creating responsible person:', error);
+		return json({ error: 'Error al crear el responsable' }, { status: 500 });
 	}
 };

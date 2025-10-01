@@ -65,10 +65,10 @@
 			purple: 'bg-purple-500',
 			orange: 'bg-orange-500',
 			yellow: 'bg-yellow-500',
-			indigo: 'bg-indigo-500',
+			indigo: 'bg-green-500',
 			pink: 'bg-pink-500'
 		};
-		return colorMap[color as keyof typeof colorMap] || 'bg-blue-500';
+		return colorMap[color as keyof typeof colorMap] || 'bg-green-500';
 	}
 </script>
 

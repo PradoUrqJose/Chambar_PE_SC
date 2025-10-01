@@ -1,21 +1,7 @@
-# Configuración de Cloudflare Pages para Chambar
 name = "chambar"
-pages_build_output_dir = ".svelte-kit/cloudflare"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-01-15"
 
-# Configuración de D1 (Base de datos)
-# Base de datos de producción
 [[d1_databases]]
 binding = "DB"
-database_name = "chambar-db"
-database_id = "df744650-a1b5-474b-aa6c-d26fd9205768"
-
-# Base de datos de desarrollo
-[[d1_databases]]
-binding = "DB_DEV"
 database_name = "chambar-dev"
-database_id = "dde60c1e-9fb6-4a53-a592-0493e046fc77"
-
-# Variables de entorno
-[vars]
-NODE_ENV = "production"
+database_id = "81e6d59a-0dbf-4216-99e1-63d4326c8dab"

@@ -1,154 +1,125 @@
-<!-- Página de gestión de operaciones (ingresos y egresos) -->
-<!-- Esta página permite registrar, ver, editar y eliminar operaciones de caja -->
-
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import type { PageData } from './$types';
+
+	let { data } = $props<{ data: PageData }>();
 	
-	// Variables reactivas
-	let operations: any[] = [];
-	let isLoading = true;
-	let errorMessage = '';
-	let successMessage = '';
-	let showNewOperationForm = false;
-	let editingOperation: any = null;
-	
-	// Filtros
-	let filters = {
-		type: 'all', // 'all', 'income', 'expense'
-		date: new Date().toISOString().split('T')[0],
-		search: ''
-	};
-	
-	// Datos de catálogos
-	let operationDetails: any[] = [];
-	let responsiblePersons: any[] = [];
-	let stands: any[] = [];
-	let companies: any[] = [];
-	let todayCashBox: any = null;
-	
-	// Formulario de nueva operación
-	let newOperation = {
+	let isLoading = $state(true);
+	let operations = $state([]);
+	let errorMessage = $state('');
+	let showNewOperationForm = $state(false);
+
+	// Datos del formulario de nueva operación
+	let newOperation = $state({
 		type: 'income',
 		amount: 0,
+		description: '',
+		cashBoxId: '1',
 		operationDetailId: '',
-		responsibleId: '',
+		responsiblePersonId: '',
 		standId: '',
 		companyId: '',
-		description: '',
-		voucherNumber: '',
-		paymentMethod: 'cash'
-	};
-	
-	// Formatear monto en soles
-	function formatAmount(amount: number) {
-		return new Intl.NumberFormat('es-PE', {
-			style: 'currency',
-			currency: 'PEN'
-		}).format(amount / 100);
+		image: null
+	});
+
+	// Datos para los selects
+	let operationDetails = $state([]);
+	let responsiblePersons = $state([]);
+	let stands = $state([]);
+	let companies = $state([]);
+	let selectedOperationDetail = $state(null);
+
+	// Cargar datos para los selects
+	async function loadSelectData() {
+		try {
+			// Cargar detalles de operación
+			const detailsResponse = await fetch('/api/catalogs/operation-details');
+			if (detailsResponse.ok) {
+				operationDetails = await detailsResponse.json();
+			}
+
+			// Cargar responsables
+			const responsibleResponse = await fetch('/api/catalogs/responsible-persons');
+			if (responsibleResponse.ok) {
+				responsiblePersons = await responsibleResponse.json();
+			}
+
+			// Cargar stands
+			const standsResponse = await fetch('/api/catalogs/stands');
+			if (standsResponse.ok) {
+				stands = await standsResponse.json();
+			}
+
+			// Cargar empresas
+			const companiesResponse = await fetch('/api/companies');
+			if (companiesResponse.ok) {
+				companies = await companiesResponse.json();
+			}
+		} catch (error) {
+			console.error('Error loading select data:', error);
+		}
 	}
-	
-	// Formatear fecha
-	function formatDate(date: Date | string) {
-		const d = typeof date === 'string' ? new Date(date) : date;
-		return d.toLocaleString('es-PE', {
-			year: 'numeric',
-			month: '2-digit',
-			day: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
-	
-	// Cargar datos iniciales
-	async function loadInitialData() {
+
+	// Cargar operaciones
+	async function loadOperations() {
 		try {
 			isLoading = true;
-			
-			// Cargar datos en paralelo
-			const [operationsRes, detailsRes, responsiblesRes, standsRes, companiesRes, cashBoxRes] = await Promise.all([
-				fetch('/api/operations'),
-				fetch('/api/catalogs/operation-details'),
-				fetch('/api/catalogs/responsible-persons'),
-				fetch('/api/catalogs/stands'),
-				fetch('/api/catalogs/companies'),
-				fetch('/api/cash-boxes/today')
-			]);
-			
-			// Procesar respuestas
-			const operationsData = await operationsRes.json();
-			const detailsData = await detailsRes.json();
-			const responsiblesData = await responsiblesRes.json();
-			const standsData = await standsRes.json();
-			const companiesData = await companiesRes.json();
-			const cashBoxData = await cashBoxRes.json();
-			
-			// Asignar datos
-			operations = operationsData.success ? operationsData.data : [];
-			operationDetails = detailsData.success ? detailsData.data : [];
-			responsiblePersons = responsiblesData.success ? responsiblesData.data : [];
-			stands = standsData.success ? standsData.data : [];
-			companies = companiesData.success ? companiesData.data : [];
-			todayCashBox = cashBoxData.success ? cashBoxData.data : null;
-			
-			// Verificar que hay caja abierta
-			if (!todayCashBox || todayCashBox.status !== 'open') {
-				errorMessage = 'No hay caja abierta. Debe abrir una caja antes de registrar operaciones.';
+			const response = await fetch('/api/operations');
+			if (response.ok) {
+				operations = await response.json();
+			} else {
+				// Fallback a datos mock si no hay API
+				operations = [
+					{
+						id: '1',
+						type: 'income',
+						amount: 150.00,
+						description: 'Venta de productos',
+						cashBoxId: '1',
+						createdAt: new Date().toISOString()
+					},
+					{
+						id: '2',
+						type: 'expense',
+						amount: 80.00,
+						description: 'Pago a proveedor',
+						cashBoxId: '1',
+						createdAt: new Date().toISOString()
+					}
+				];
 			}
-			
 		} catch (error) {
-			console.error('Error cargando datos:', error);
-			errorMessage = 'Error cargando datos';
+			errorMessage = 'Error al cargar las operaciones';
+			console.error('Error loading operations:', error);
 		} finally {
 			isLoading = false;
 		}
 	}
-	
-	// Filtrar operaciones
-	function getFilteredOperations() {
-		let filtered = operations;
-		
-		// Filtrar por tipo
-		if (filters.type !== 'all') {
-			filtered = filtered.filter(op => op.type === filters.type);
-		}
-		
-		// Filtrar por búsqueda
-		if (filters.search) {
-			const search = filters.search.toLowerCase();
-			filtered = filtered.filter(op => 
-				op.description?.toLowerCase().includes(search) ||
-				op.voucherNumber?.toLowerCase().includes(search)
-			);
-		}
-		
-		return filtered;
-	}
-	
-	// Calcular totales
-	function getTotals() {
-		const filtered = getFilteredOperations();
-		let totalIncome = 0;
-		let totalExpense = 0;
-		
-		filtered.forEach(op => {
-			if (op.type === 'income') {
-				totalIncome += op.amount;
-			} else {
-				totalExpense += op.amount;
-			}
-		});
-		
-		return {
-			income: totalIncome,
-			expense: totalExpense,
-			net: totalIncome - totalExpense
-		};
-	}
-	
+
 	// Crear nueva operación
 	async function createOperation() {
 		try {
+			// Validaciones
+			if (!newOperation.operationDetailId) {
+				errorMessage = 'Debe seleccionar un detalle de operación';
+				return;
+			}
+
+			if (!newOperation.responsiblePersonId) {
+				errorMessage = 'Debe seleccionar un responsable';
+				return;
+			}
+
+			if (!newOperation.description.trim()) {
+				errorMessage = 'La descripción es obligatoria';
+				return;
+			}
+
+			if (newOperation.amount <= 0) {
+				errorMessage = 'El monto debe ser mayor a 0';
+				return;
+			}
+
 			const response = await fetch('/api/operations', {
 				method: 'POST',
 				headers: {
@@ -156,468 +127,338 @@
 				},
 				body: JSON.stringify(newOperation)
 			});
-			
-			const result = await response.json();
-			
-			if (result.success) {
-				successMessage = 'Operación creada correctamente';
-				await loadInitialData();
-				resetForm();
+
+			if (response.ok) {
 				showNewOperationForm = false;
+				resetForm();
+				await loadOperations(); // Recargar operaciones
+				// Recargar página para actualizar el monto de caja
+				window.location.reload();
 			} else {
-				errorMessage = result.error || 'Error creando operación';
+				const error = await response.json();
+				errorMessage = error.message || 'Error al crear la operación';
 			}
 		} catch (error) {
-			console.error('Error creando operación:', error);
-			errorMessage = 'Error de conexión';
+			errorMessage = 'Error al crear la operación';
+			console.error('Error creating operation:', error);
 		}
 	}
-	
-	// Eliminar operación
-	async function deleteOperation(operationId: string) {
-		if (!confirm('¿Está seguro de eliminar esta operación?')) return;
-		
-		try {
-			const response = await fetch(`/api/operations/${operationId}`, {
-				method: 'DELETE'
-			});
-			
-			const result = await response.json();
-			
-			if (result.success) {
-				successMessage = 'Operación eliminada correctamente';
-				await loadInitialData();
-			} else {
-				errorMessage = result.error || 'Error eliminando operación';
-			}
-		} catch (error) {
-			console.error('Error eliminando operación:', error);
-			errorMessage = 'Error de conexión';
+
+	// Manejar cambio de detalle de operación
+	function handleOperationDetailChange() {
+		const detail = operationDetails.find(d => d.id === newOperation.operationDetailId);
+		selectedOperationDetail = detail;
+		if (detail) {
+			newOperation.type = detail.type;
 		}
 	}
-	
+
+	// Manejar carga de imagen
+	function handleImageUpload(event) {
+		const file = event.target.files[0];
+		if (file) {
+			newOperation.image = file;
+		}
+	}
+
 	// Resetear formulario
 	function resetForm() {
 		newOperation = {
 			type: 'income',
 			amount: 0,
+			description: '',
+			cashBoxId: '1',
 			operationDetailId: '',
-			responsibleId: '',
+			responsiblePersonId: '',
 			standId: '',
 			companyId: '',
-			description: '',
-			voucherNumber: '',
-			paymentMethod: 'cash'
+			image: null
 		};
-		editingOperation = null;
+		selectedOperationDetail = null;
 	}
-	
-	// Cargar datos al montar
+
 	onMount(() => {
-		loadInitialData();
+		loadOperations();
+		loadSelectData();
 	});
-	
-	// Obtener nombre de catálogo por ID
-	function getCatalogName(catalog: any[], id: string) {
-		const item = catalog.find(c => c.id === id);
-		return item ? item.name : 'N/A';
-	}
 </script>
 
 <svelte:head>
 	<title>Operaciones - Chambar</title>
 </svelte:head>
 
-<!-- Header -->
-<header class="bg-white shadow">
-	<div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+<div class="max-w-7xl mx-auto">
+	<!-- Header -->
+	<div class="mb-8">
 		<div class="flex justify-between items-center">
 			<div>
-				<h1 class="text-3xl font-bold text-gray-900">
-					Operaciones
-				</h1>
-				<p class="mt-1 text-sm text-gray-500">
-					Gestión de ingresos y egresos
-				</p>
+				<h1 class="text-3xl font-bold text-gray-900">Operaciones</h1>
+				<p class="mt-2 text-gray-600">Gestiona ingresos y egresos del sistema</p>
 			</div>
-			<div class="flex space-x-4">
-				{#if todayCashBox && todayCashBox.status === 'open'}
-					<button
-						on:click={() => showNewOperationForm = true}
-						class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-					>
-						Nueva Operación
-					</button>
-				{/if}
-				<a
-					href="/cash-boxes"
-					class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
-				>
-					Ver Caja
-				</a>
-			</div>
+			<button
+				onclick={() => showNewOperationForm = true}
+				class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+			>
+				Nueva Operación
+			</button>
 		</div>
 	</div>
-</header>
 
-<!-- Contenido principal -->
-<main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-	<div class="px-4 py-6 sm:px-0">
-		
-		<!-- Mensajes -->
-		{#if errorMessage}
-			<div class="mb-6 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md">
+	<!-- Mensaje de error -->
+	{#if errorMessage}
+		<div class="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+			<div class="flex">
+				<svg class="w-5 h-5 text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
 				{errorMessage}
 			</div>
-		{/if}
-		
-		{#if successMessage}
-			<div class="mb-6 bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-md">
-				{successMessage}
-			</div>
-		{/if}
-		
-		<!-- Estado de la caja -->
-		{#if todayCashBox}
-			<div class="mb-6 bg-white shadow rounded-lg p-4">
-				<div class="flex items-center justify-between">
-					<div>
-						<h3 class="text-lg font-medium text-gray-900">
-							Estado de la Caja
-						</h3>
-						<p class="text-sm text-gray-500">
-							{formatDate(todayCashBox.openedAt)} - 
-							{todayCashBox.status === 'open' ? 'Abierta' : 'Cerrada'}
-						</p>
-					</div>
-					<div class="text-right">
-						<p class="text-sm text-gray-500">Monto Inicial</p>
-						<p class="text-lg font-medium text-gray-900">
-							{formatAmount(todayCashBox.initialAmount)}
-						</p>
-					</div>
-				</div>
-			</div>
-		{/if}
-		
-		<!-- Filtros -->
-		<div class="mb-6 bg-white shadow rounded-lg p-4">
-			<h3 class="text-lg font-medium text-gray-900 mb-4">Filtros</h3>
-			<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-				<div>
-					<label for="typeFilter" class="block text-sm font-medium text-gray-700">
-						Tipo
-					</label>
-					<select
-						id="typeFilter"
-						bind:value={filters.type}
-						class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-					>
-						<option value="all">Todos</option>
-						<option value="income">Ingresos</option>
-						<option value="expense">Egresos</option>
-					</select>
-				</div>
-				<div>
-					<label for="dateFilter" class="block text-sm font-medium text-gray-700">
-						Fecha
-					</label>
-					<input
-						id="dateFilter"
-						type="date"
-						bind:value={filters.date}
-						class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-					/>
-				</div>
-				<div>
-					<label for="searchFilter" class="block text-sm font-medium text-gray-700">
-						Buscar
-					</label>
-					<input
-						id="searchFilter"
-						type="text"
-						bind:value={filters.search}
-						placeholder="Descripción o voucher..."
-						class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-					/>
-				</div>
-				<div class="flex items-end">
-					<button
-						on:click={loadInitialData}
-						class="w-full bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
-					>
-						Actualizar
-					</button>
-				</div>
-			</div>
 		</div>
-		
-		<!-- Totales -->
-		{#if operations.length > 0}
-			{@const totals = getTotals()}
-			<div class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-				<div class="bg-green-50 border border-green-200 rounded-lg p-4">
-					<div class="text-sm font-medium text-green-800">Total Ingresos</div>
-					<div class="text-2xl font-bold text-green-900">{formatAmount(totals.income)}</div>
-				</div>
-				<div class="bg-red-50 border border-red-200 rounded-lg p-4">
-					<div class="text-sm font-medium text-red-800">Total Egresos</div>
-					<div class="text-2xl font-bold text-red-900">{formatAmount(totals.expense)}</div>
-				</div>
-				<div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-					<div class="text-sm font-medium text-blue-800">Neto</div>
-					<div class="text-2xl font-bold text-blue-900">{formatAmount(totals.net)}</div>
-				</div>
-			</div>
-		{/if}
-		
+	{/if}
+
+	{#if isLoading}
+		<div class="flex items-center justify-center py-12">
+			<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+			<span class="ml-2 text-gray-600">Cargando operaciones...</span>
+		</div>
+	{:else}
 		<!-- Lista de operaciones -->
 		<div class="bg-white shadow rounded-lg">
-			<div class="px-4 py-5 sm:p-6">
-				<h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-					Operaciones ({getFilteredOperations().length})
-				</h3>
-				
-				{#if isLoading}
-					<div class="flex justify-center items-center py-12">
-						<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-						<span class="ml-3 text-gray-600">Cargando...</span>
-					</div>
-				{:else if getFilteredOperations().length === 0}
-					<div class="text-center py-12">
-						<div class="mx-auto h-12 w-12 text-gray-400">
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-							</svg>
+			<div class="px-6 py-4 border-b border-gray-200">
+				<h3 class="text-lg font-medium text-gray-900">Historial de Operaciones</h3>
+			</div>
+			<div class="divide-y divide-gray-200">
+				{#each operations as operation}
+					<div class="px-6 py-4 flex items-center justify-between">
+						<div class="flex items-center">
+							<div class="w-10 h-10 rounded-full flex items-center justify-center
+								{operation.type === 'income' ? 'bg-green-100' : 'bg-red-100'}"
+							>
+								<svg class="w-5 h-5 {operation.type === 'income' ? 'text-green-600' : 'text-red-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									{#if operation.type === 'income'}
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+									{:else}
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+									{/if}
+								</svg>
+							</div>
+							<div class="ml-4">
+								<p class="text-sm font-medium text-gray-900">{operation.description}</p>
+								<p class="text-sm text-gray-500">{new Date(operation.createdAt).toLocaleString()}</p>
+							</div>
 						</div>
-						<h3 class="mt-2 text-sm font-medium text-gray-900">No hay operaciones</h3>
-						<p class="mt-1 text-sm text-gray-500">Comience registrando una nueva operación.</p>
+						<div class="text-right">
+							<p class="text-sm font-medium {operation.type === 'income' ? 'text-green-600' : 'text-red-600'}">
+								{operation.type === 'income' ? '+' : '-'} S/. {operation.amount.toFixed(2)}
+							</p>
+						</div>
 					</div>
-				{:else}
-					<div class="overflow-x-auto">
-						<table class="min-w-full divide-y divide-gray-200">
-							<thead class="bg-gray-50">
-								<tr>
-									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-										Tipo
-									</th>
-									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-										Monto
-									</th>
-									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-										Detalle
-									</th>
-									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-										Responsable
-									</th>
-									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-										Stand
-									</th>
-									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-										Fecha
-									</th>
-									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-										Acciones
-									</th>
-								</tr>
-							</thead>
-							<tbody class="bg-white divide-y divide-gray-200">
-								{#each getFilteredOperations() as operation}
-									<tr>
-										<td class="px-6 py-4 whitespace-nowrap">
-											<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-												{operation.type === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-												{operation.type === 'income' ? 'Ingreso' : 'Egreso'}
-											</span>
-										</td>
-										<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-											{formatAmount(operation.amount)}
-										</td>
-										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-											{getCatalogName(operationDetails, operation.operationDetailId)}
-										</td>
-										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-											{getCatalogName(responsiblePersons, operation.responsibleId)}
-										</td>
-										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-											{getCatalogName(stands, operation.standId)}
-										</td>
-										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-											{formatDate(operation.operationDate)}
-										</td>
-										<td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-											<button
-												on:click={() => deleteOperation(operation.id)}
-												class="text-red-600 hover:text-red-900"
-											>
-												Eliminar
-											</button>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				{/if}
+				{/each}
 			</div>
 		</div>
-	</div>
-</main>
+	{/if}
 
-<!-- Modal de nueva operación -->
-{#if showNewOperationForm}
-	<div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-		<div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-			<div class="mt-3">
-				<h3 class="text-lg font-medium text-gray-900 mb-4">
-					Nueva Operación
-				</h3>
-				
-				<form on:submit|preventDefault={createOperation} class="space-y-4">
-					<!-- Tipo de operación -->
-					<div>
-						<label class="block text-sm font-medium text-gray-700">Tipo</label>
-						<select
-							bind:value={newOperation.type}
-							class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+	<!-- Modal de nueva operación -->
+	{#if showNewOperationForm}
+		<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+			<div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+				<!-- Header del modal -->
+				<div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-xl">
+					<div class="flex items-center justify-between">
+						<h3 class="text-xl font-semibold text-gray-900">Nueva Operación</h3>
+						<button
+							onclick={() => {
+								showNewOperationForm = false;
+								resetForm();
+							}}
+							class="text-gray-400 hover:text-gray-600 transition-colors"
 						>
-							<option value="income">Ingreso</option>
-							<option value="expense">Egreso</option>
-						</select>
+							<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+							</svg>
+						</button>
 					</div>
-					
-					<!-- Monto -->
+				</div>
+
+				<!-- Contenido del modal -->
+				<div class="p-6 space-y-6">
+					<!-- Detalle de Operación (Primero) -->
 					<div>
-						<label class="block text-sm font-medium text-gray-700">Monto (S/.)</label>
-						<input
-							type="number"
-							step="0.01"
-							bind:value={newOperation.amount}
-							class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-							required
-						/>
-					</div>
-					
-					<!-- Detalle de operación -->
-					<div>
-						<label for="operationDetail" class="block text-sm font-medium text-gray-700">Detalle</label>
-						<select
-							id="operationDetail"
+						<label for="operation-detail" class="block text-sm font-medium text-gray-700 mb-2">
+							Detalle de Operación <span class="text-red-500">*</span>
+						</label>
+						<select 
+							id="operation-detail" 
 							bind:value={newOperation.operationDetailId}
-							class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-							required
+							onchange={handleOperationDetailChange}
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
 						>
-							<option value="">Seleccionar...</option>
-							{#each operationDetails.filter(d => d.type === newOperation.type) as detail}
+							<option value="">Seleccionar detalle...</option>
+							{#each operationDetails as detail}
 								<option value={detail.id}>{detail.name}</option>
 							{/each}
 						</select>
+						
+						<!-- Mostrar tipo e icono del detalle seleccionado -->
+						{#if selectedOperationDetail}
+							<div class="mt-2 flex items-center space-x-2">
+								<div class="w-6 h-6 rounded-full flex items-center justify-center
+									{selectedOperationDetail.type === 'income' ? 'bg-green-100' : 'bg-red-100'}"
+								>
+									<svg class="w-4 h-4 {selectedOperationDetail.type === 'income' ? 'text-green-600' : 'text-red-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										{#if selectedOperationDetail.type === 'income'}
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+										{:else}
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+										{/if}
+									</svg>
+								</div>
+								<span class="text-sm font-medium {selectedOperationDetail.type === 'income' ? 'text-green-600' : 'text-red-600'}">
+									{selectedOperationDetail.type === 'income' ? 'Ingreso' : 'Egreso'}
+								</span>
+							</div>
+						{/if}
 					</div>
-					
-						<!-- Responsable -->
-						<div>
-							<label for="responsible" class="block text-sm font-medium text-gray-700">Responsable</label>
-							<select
-								id="responsible"
-								bind:value={newOperation.responsibleId}
-								class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-								required
-							>
-							<option value="">Seleccionar...</option>
+
+					<!-- Monto con color dinámico -->
+					<div>
+						<label for="operation-amount" class="block text-sm font-medium text-gray-700 mb-2">
+							Monto (S/.) <span class="text-red-500">*</span>
+						</label>
+						<input
+							id="operation-amount"
+							type="number"
+							step="0.01"
+							min="0"
+							bind:value={newOperation.amount}
+							class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500
+								{selectedOperationDetail?.type === 'expense' 
+									? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
+									: selectedOperationDetail?.type === 'income'
+									? 'border-green-300 focus:ring-green-500 focus:border-green-500'
+									: 'border-gray-300'}"
+							placeholder="0.00"
+						/>
+					</div>
+
+					<!-- Responsable (Obligatorio) -->
+					<div>
+						<label for="responsible-person" class="block text-sm font-medium text-gray-700 mb-2">
+							Responsable <span class="text-red-500">*</span>
+						</label>
+						<select 
+							id="responsible-person" 
+							bind:value={newOperation.responsiblePersonId}
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+						>
+							<option value="">Seleccionar responsable...</option>
 							{#each responsiblePersons as person}
-								<option value={person.id}>{person.name}</option>
+								<option value={person.id}>{person.name} - {person.email}</option>
 							{/each}
 						</select>
 					</div>
-					
-						<!-- Stand -->
-						<div>
-							<label for="stand" class="block text-sm font-medium text-gray-700">Stand</label>
-							<select
-								id="stand"
-								bind:value={newOperation.standId}
-								class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-								required
-							>
-							<option value="">Seleccionar...</option>
-							{#each stands as stand}
-								<option value={stand.id}>{stand.name}</option>
-							{/each}
-						</select>
-					</div>
-					
-						<!-- Empresa (opcional) -->
-						<div>
-							<label for="company" class="block text-sm font-medium text-gray-700">Empresa (opcional)</label>
-							<select
-								id="company"
-								bind:value={newOperation.companyId}
-								class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-							>
-							<option value="">Seleccionar...</option>
+
+					<!-- Empresa (Opcional) -->
+					<div>
+						<label for="company" class="block text-sm font-medium text-gray-700 mb-2">
+							Empresa <span class="text-gray-400">(Opcional)</span>
+						</label>
+						<select 
+							id="company" 
+							bind:value={newOperation.companyId}
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+						>
+							<option value="">Seleccionar empresa...</option>
 							{#each companies as company}
-								<option value={company.id}>{company.name}</option>
+								<option value={company.id}>{company.razonSocial} - {company.ruc}</option>
 							{/each}
 						</select>
 					</div>
-					
-						<!-- Descripción -->
-						<div>
-							<label for="description" class="block text-sm font-medium text-gray-700">Descripción</label>
-							<input
-								id="description"
-								type="text"
-								bind:value={newOperation.description}
-								class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-								placeholder="Descripción de la operación..."
-							/>
-					</div>
-					
-						<!-- Número de voucher -->
-						<div>
-							<label for="voucherNumber" class="block text-sm font-medium text-gray-700">Número de Voucher</label>
-							<input
-								id="voucherNumber"
-								type="text"
-								bind:value={newOperation.voucherNumber}
-								class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-								placeholder="Número de voucher..."
-							/>
-					</div>
-					
-						<!-- Método de pago -->
-						<div>
-							<label for="paymentMethod" class="block text-sm font-medium text-gray-700">Método de Pago</label>
-							<select
-								id="paymentMethod"
-								bind:value={newOperation.paymentMethod}
-								class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-							>
-							<option value="cash">Efectivo</option>
-							<option value="card">Tarjeta</option>
-							<option value="transfer">Transferencia</option>
-							<option value="check">Cheque</option>
+
+					<!-- Stand (Opcional) -->
+					<div>
+						<label for="stand" class="block text-sm font-medium text-gray-700 mb-2">
+							Stand <span class="text-gray-400">(Opcional)</span>
+						</label>
+						<select 
+							id="stand" 
+							bind:value={newOperation.standId}
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+						>
+							<option value="">Seleccionar stand...</option>
+							{#each stands as stand}
+								<option value={stand.id}>{stand.name} - {stand.location}</option>
+							{/each}
 						</select>
 					</div>
-					
-					<!-- Botones -->
-					<div class="flex justify-end space-x-3 pt-4">
+
+					<!-- Descripción -->
+					<div>
+						<label for="operation-description" class="block text-sm font-medium text-gray-700 mb-2">
+							Descripción <span class="text-red-500">*</span>
+						</label>
+						<textarea
+							id="operation-description"
+							bind:value={newOperation.description}
+							rows="3"
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+							placeholder="Ej: Venta de productos en efectivo"
+						></textarea>
+					</div>
+
+					<!-- Carga de imagen -->
+					<div>
+						<label for="operation-image" class="block text-sm font-medium text-gray-700 mb-2">
+							Documento/Voucher <span class="text-gray-400">(Opcional)</span>
+						</label>
+						<div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-gray-400 transition-colors">
+							<div class="space-y-1 text-center">
+								<svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+									<path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+								</svg>
+								<div class="flex text-sm text-gray-600">
+									<label for="operation-image" class="relative cursor-pointer bg-white rounded-md font-medium text-green-600 hover:text-green-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-green-500">
+										<span>Subir archivo</span>
+										<input 
+											id="operation-image" 
+											type="file" 
+											accept="image/*,.pdf" 
+											onchange={handleImageUpload}
+											class="sr-only"
+										/>
+									</label>
+									<p class="pl-1">o arrastra y suelta</p>
+								</div>
+								<p class="text-xs text-gray-500">PNG, JPG, PDF hasta 10MB</p>
+								{#if newOperation.image}
+									<p class="text-sm text-green-600 font-medium">{newOperation.image.name}</p>
+								{/if}
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Footer del modal -->
+				<div class="sticky bottom-0 bg-gray-50 px-6 py-4 rounded-b-xl border-t border-gray-200">
+					<div class="flex justify-end space-x-3">
 						<button
-							type="button"
-							on:click={() => { showNewOperationForm = false; resetForm(); }}
-							class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
+							onclick={() => {
+								showNewOperationForm = false;
+								resetForm();
+							}}
+							class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
 						>
 							Cancelar
 						</button>
 						<button
-							type="submit"
-							class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+							onclick={createOperation}
+							class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors font-medium"
 						>
 							Crear Operación
 						</button>
 					</div>
-				</form>
+				</div>
 			</div>
 		</div>
-	</div>
-{/if}
+	{/if}
+</div>

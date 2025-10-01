@@ -1,11 +1,17 @@
+import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
-import { getSimpleUser } from '$lib/server/auth/simple-auth';
 
-export const load: LayoutServerLoad = async ({ cookies }) => {
-	// Obtener información del usuario desde la sesión
-	const user = await getSimpleUser({ cookies });
-	
+export const load: LayoutServerLoad = async ({ locals, url }) => {
+	// Rutas que no requieren autenticación
+	const publicRoutes = ['/login'];
+	const isPublicRoute = publicRoutes.includes(url.pathname);
+
+	// Si no es una ruta pública y no hay usuario, redirigir al login
+	if (!isPublicRoute && !locals.user) {
+		throw redirect(302, '/login');
+	}
+
 	return {
-		user
+		user: locals.user
 	};
 };

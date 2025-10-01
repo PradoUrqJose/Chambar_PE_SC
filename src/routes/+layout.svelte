@@ -1,122 +1,52 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
-    import '../app.css';
-	import { page } from '$app/stores';
+	import '../app.css';
+	import Sidebar from '$lib/components/Sidebar.svelte';
+	import Header from '$lib/components/Header.svelte';
 	import type { LayoutData } from './$types';
 
 	let { children, data } = $props<{ children: any; data: LayoutData }>();
 	
-	// Función para determinar si un enlace está activo
-	function isActive(href: string) {
-		return $page.url.pathname === href;
-	}
+	// Estado del sidebar
+	let sidebarOpen = $state(false);
 	
 	// Verificar si el usuario está autenticado
 	let isAuthenticated = $derived(!!data.user);
+	
+	// Función para alternar el sidebar
+	function toggleSidebar() {
+		sidebarOpen = !sidebarOpen;
+	}
 </script>
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<!-- Layout principal con navegación -->
+<!-- Layout principal -->
 <div class="min-h-screen bg-gray-50">
 	{#if isAuthenticated}
-		<!-- Header de navegación - Solo visible cuando el usuario está autenticado -->
-		<header class="bg-white shadow-sm border-b">
-			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-				<div class="flex justify-between items-center h-16">
-					<!-- Logo -->
-					<div class="flex items-center">
-						<a href="/dashboard" class="flex items-center">
-							<div class="w-8 h-8 bg-indigo-600 rounded-md flex items-center justify-center">
-								<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
-								</svg>
-							</div>
-							<span class="ml-2 text-xl font-bold text-gray-900">Chambar</span>
-						</a>
+		<div class="flex h-screen">
+			<!-- Sidebar -->
+			<Sidebar bind:isOpen={sidebarOpen} user={data.user} />
+			
+			<!-- Contenido principal -->
+			<div class="flex-1 flex flex-col overflow-hidden">
+				<!-- Header -->
+				<Header onToggleSidebar={toggleSidebar} />
+				
+				<!-- Área de contenido -->
+				<main class="flex-1 overflow-y-auto">
+					<div class="p-6">
+						{@render children?.()}
 					</div>
-					
-					<!-- Navegación principal -->
-					<nav class="hidden md:flex space-x-8">
-						<a 
-							href="/dashboard" 
-							class="px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200
-								{isActive('/dashboard') 
-									? 'bg-indigo-100 text-indigo-700' 
-									: 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}"
-						>
-							Dashboard
-						</a>
-						<a 
-							href="/cash-boxes" 
-							class="px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200
-								{isActive('/cash-boxes') 
-									? 'bg-indigo-100 text-indigo-700' 
-									: 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}"
-						>
-							Caja
-						</a>
-						<a 
-							href="/operations" 
-							class="px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200
-								{isActive('/operations') 
-									? 'bg-indigo-100 text-indigo-700' 
-									: 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}"
-						>
-							Operaciones
-						</a>
-						<a 
-							href="/catalogs" 
-							class="px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200
-								{isActive('/catalogs') 
-									? 'bg-indigo-100 text-indigo-700' 
-									: 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}"
-						>
-							Catálogos
-						</a>
-						<a 
-							href="/reports" 
-							class="px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200
-								{isActive('/reports') 
-									? 'bg-indigo-100 text-indigo-700' 
-									: 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}"
-						>
-							Reportes
-						</a>
-					</nav>
-					
-					<!-- Menú de usuario -->
-					<div class="flex items-center space-x-4">
-						<span class="text-sm text-gray-700">Hola, {data.user?.email}</span>
-						<a 
-							href="/logout" 
-							class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100"
-						>
-							Cerrar Sesión
-						</a>
-					</div>
-					
-					<!-- Menú móvil (hamburguesa) -->
-					<div class="md:hidden">
-						<button 
-							type="button" 
-							class="bg-white p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
-						>
-							<span class="sr-only">Abrir menú principal</span>
-							<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-							</svg>
-						</button>
-					</div>
-				</div>
+				</main>
 			</div>
-		</header>
+		</div>
+	{:else}
+		<!-- Contenido sin sidebar para login -->
+		<main class="min-h-screen">
+			{@render children?.()}
+		</main>
 	{/if}
-	
-	<!-- Contenido principal -->
-	<main class="flex-1">
-		{@render children?.()}
-	</main>
 </div>
