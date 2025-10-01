@@ -112,7 +112,7 @@ export async function reopenCashBox(
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
 		console.log('Modo desarrollo: simulando reapertura de caja');
-		updateMockCashBoxStatus(id, 'open', 0, reopenedAt, 'reaperturado');
+		updateMockCashBoxStatus(id, 'reopened', 0, reopenedAt);
 		return { success: true };
 	}
 	

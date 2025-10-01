@@ -39,17 +39,7 @@
 	// Estados para tabla
 	let rowsPerPage = $state(5);
 	
-	// Estados para formulario de operación
-	let newOperation = $state({
-		type: 'income' as 'income' | 'expense',
-		amount: 0,
-		description: '',
-		operationDetailId: '',
-		responsiblePersonId: '',
-		standId: '',
-		companyId: '',
-		image: null as File | null
-	});
+	// Estados para formulario de operación (ahora manejado por OperationModal)
 
 	// Datos de catálogos
 	let operationDetails = $state<any[]>([]);
@@ -57,14 +47,31 @@
 	let stands = $state<any[]>([]);
 	let companies = $state<any[]>([]);
 
+	// Función para obtener TODAS las operaciones de una caja (sin límite de paginación)
+	async function getAllOperationsForCashBox(cashBoxId: string, date: Date): Promise<any[]> {
+		try {
+			const dateStr = toPeruDateString(date);
+			const response = await fetch(`/api/operations?date=${dateStr}&cashBoxId=${cashBoxId}&limit=1000`); // Límite alto para obtener todas
+			
+			if (response.ok) {
+				const data = await response.json();
+				return Array.isArray(data) ? data : data.operations || [];
+			}
+			return [];
+		} catch (error) {
+			console.error('Error loading all operations for cash box:', error);
+			return [];
+		}
+	}
+
 	// Función para calcular saldo derivado (eliminando currentAmount persistido)
-	function computeCurrentAmount(cashBoxId: string): number {
+	async function computeCurrentAmount(cashBoxId: string): Promise<number> {
 		const cashBox = cashBoxes.find(cb => cb.id === cashBoxId);
 		if (!cashBox) return 0;
 		
-		// Asegurar que operations es un array
-		const operationsArray = Array.isArray(operations) ? operations : operations.operations || [];
-		const operationsForBox = operationsArray.filter(op => op.cashBoxId === cashBoxId);
+		// Obtener TODAS las operaciones de la caja, no solo las renderizadas
+		const allOperations = await getAllOperationsForCashBox(cashBoxId, currentDate);
+		const operationsForBox = allOperations.filter(op => op.cashBoxId === cashBoxId);
 		const delta = operationsForBox.reduce((acc, op) => {
 			return acc + (op.type === 'income' ? op.amount : -op.amount);
 		}, 0);
@@ -75,12 +82,7 @@
 	// Función para obtener caja para la fecha actual
 	function getCashBoxForDate(date: Date): CashBox | null {
 		const targetDate = toPeruDateString(date);
-		console.log('🔍 getCashBoxForDate - targetDate:', targetDate);
-		console.log('🔍 Available cash boxes count:', cashBoxes.length);
-		
 		const found = cashBoxes.find(cb => cb.businessDate === targetDate);
-		console.log('🔍 Found cash box:', found ? found.name : 'null');
-		
 		return found || null;
 	}
 
@@ -94,8 +96,14 @@
 	// Función para actualizar estado de navegación
 	function updateNavigationState() {
 		const today = new Date();
-		canNavigateBack = currentDate.getTime() < today.getTime();
-		canNavigateForward = currentDate.getTime() < today.getTime();
+		const todayStr = toPeruDateString(today);
+		const currentDateStr = toPeruDateString(currentDate);
+		
+		// Siempre se puede navegar hacia atrás (hasta que no haya más datos)
+		canNavigateBack = true;
+		
+		// Solo se puede navegar hacia adelante si la fecha actual es menor que hoy
+		canNavigateForward = currentDateStr < todayStr;
 	}
 
 	// Función para navegar a una fecha
@@ -104,6 +112,8 @@
 		updateNavigationState();
 		await loadOperationsForDate(date);
 		updateCurrentOpenCashBox();
+		// Actualizar el monto actual cuando cambie la fecha
+		await updateCurrentAmount();
 	}
 
 	// Función para ir a hoy
@@ -169,11 +179,13 @@
 	async function loadSelectData() {
 		console.log('📋 loadSelectData called');
 		try {
+			console.log('🔄 Starting to fetch catalog data...');
+			
 			const [detailsRes, personsRes, standsRes, companiesRes] = await Promise.all([
 				fetch('/api/catalogs/operation-details'),
 				fetch('/api/catalogs/responsible-persons'),
 				fetch('/api/catalogs/stands'),
-				fetch('/api/catalogs/companies')
+				fetch('/api/companies') // Usar el endpoint real de empresas
 			]);
 
 			console.log('📋 Select data API responses:', {
@@ -183,12 +195,63 @@
 				companies: companiesRes.status
 			});
 
-			if (detailsRes.ok) operationDetails = await detailsRes.json();
-			if (personsRes.ok) responsiblePersons = await personsRes.json();
-			if (standsRes.ok) stands = await standsRes.json();
-			if (companiesRes.ok) companies = await companiesRes.json();
+			// Detalles de operación
+			if (detailsRes.ok) {
+				operationDetails = await detailsRes.json();
+				console.log('📊 Operation details loaded:', operationDetails);
+				console.log('📊 Operation details count:', operationDetails.length);
+			} else {
+				console.error('❌ Failed to load operation details:', detailsRes.status, detailsRes.statusText);
+			}
+
+			// Responsables
+			if (personsRes.ok) {
+				responsiblePersons = await personsRes.json();
+				console.log('📊 Responsible persons loaded:', responsiblePersons);
+				console.log('📊 Responsible persons count:', responsiblePersons.length);
+			} else {
+				console.error('❌ Failed to load responsible persons:', personsRes.status, personsRes.statusText);
+			}
+
+			// Stands
+			if (standsRes.ok) {
+				stands = await standsRes.json();
+				console.log('📊 Stands loaded:', stands);
+				console.log('📊 Stands count:', stands.length);
+			} else {
+				console.error('❌ Failed to load stands:', standsRes.status, standsRes.statusText);
+			}
+
+			// Empresas
+			if (companiesRes.ok) {
+				const companiesData = await companiesRes.json();
+				console.log('📊 Raw companies data from API:', companiesData);
+				console.log('📊 Raw companies data type:', typeof companiesData);
+				console.log('📊 Raw companies data length:', Array.isArray(companiesData) ? companiesData.length : 'Not an array');
+				
+				// Mapear los datos de empresas del formato real al formato esperado
+				companies = companiesData.map((company: any) => {
+					console.log('🔄 Mapping company:', company);
+					return {
+						id: company.id,
+						name: company.razonSocial || company.name,
+						ruc: company.ruc,
+						address: company.address || '',
+						phone: company.phone || '',
+						email: company.email || ''
+					};
+				});
+				console.log('📊 Mapped companies:', companies);
+				console.log('📊 Mapped companies count:', companies.length);
+			} else {
+				console.error('❌ Failed to load companies:', companiesRes.status, companiesRes.statusText);
+			}
 			
 			console.log('✅ Select data loaded successfully');
+			console.log('📊 Final state - operationDetails:', operationDetails.length);
+			console.log('📊 Final state - responsiblePersons:', responsiblePersons.length);
+			console.log('📊 Final state - stands:', stands.length);
+			console.log('📊 Final state - companies:', companies.length);
 		} catch (error) {
 			console.error('💥 Error loading select data:', error);
 		}
@@ -233,7 +296,7 @@
 	// Función para cerrar caja
 	async function closeCashBox(cashBoxId: string) {
 		try {
-			const currentAmount = computeCurrentAmount(cashBoxId);
+			// Usar el monto actual ya calculado
 			if (currentAmount < 0) {
 				const confirmed = confirm(`⚠️ ADVERTENCIA: La caja tiene un saldo negativo de S/. ${Math.abs(currentAmount).toFixed(2)}. ¿Está seguro de cerrar la caja con este saldo?`);
 				if (!confirmed) return;
@@ -245,6 +308,8 @@
 
 			if (response.ok) {
 				await loadCashBoxes();
+				// Actualizar el monto actual después de cerrar la caja
+				await updateCurrentAmount();
 			} else {
 				const error = await response.json();
 				errorMessage = error.message || 'Error al cerrar la caja';
@@ -264,6 +329,8 @@
 
 			if (response.ok) {
 				await loadCashBoxes();
+				// Actualizar el monto actual después de reabrir la caja
+				await updateCurrentAmount();
 				showReopenConfirmation = false;
 				cashBoxToReopen = null;
 			} else {
@@ -277,7 +344,7 @@
 	}
 
 	// Función para crear operación
-	async function createOperation() {
+	async function createOperation(operationData: any) {
 		try {
 			const cashBoxForDate = getCashBoxForDate(currentDate);
 			if (!cashBoxForDate) {
@@ -290,39 +357,38 @@
 				return;
 			}
 
-			const operationData = {
-				...newOperation,
+			console.log('🔄 Creating operation for cash box:', cashBoxForDate.name);
+			console.log('🔄 Current date:', currentDate);
+			console.log('🔄 Operation data from modal:', operationData);
+
+			const finalOperationData = {
+				...operationData,
 				cashBoxId: cashBoxForDate.id,
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString()
 			};
 
+			console.log('🔄 Final operation data:', finalOperationData);
+
 			const response = await fetch('/api/operations', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(operationData)
+				body: JSON.stringify(finalOperationData)
 			});
 
 			if (response.ok) {
+				console.log('✅ Operation created successfully');
 				await loadOperationsForDate(currentDate, false);
+				// Actualizar el monto actual después de crear la operación
+				await updateCurrentAmount();
 				showOperationsModal = false;
-				// Reset form
-				newOperation = {
-					type: 'income',
-					amount: 0,
-					description: '',
-					operationDetailId: '',
-					responsiblePersonId: '',
-					standId: '',
-					companyId: '',
-					image: null
-				};
 			} else {
 				const error = await response.json();
 				errorMessage = error.message || 'Error al crear la operación';
+				console.error('❌ Error creating operation:', error);
 			}
 		} catch (error) {
-			console.error('Error creating operation:', error);
+			console.error('💥 Error creating operation:', error);
 			errorMessage = 'Error al crear la operación';
 		}
 	}
@@ -354,6 +420,10 @@
 			console.log('📊 Final state - cashBoxForDate:', cashBoxForDate ? cashBoxForDate.name : 'null');
 			
 			updateNavigationState();
+			
+			// Actualizar el monto actual de la caja
+			await updateCurrentAmount();
+			
 			isLoading = false;
 			console.log('✅ Data loading completed - isLoading set to false');
 			console.log('🔍 Final isLoading state:', isLoading);
@@ -368,25 +438,46 @@
 	
 	// Obtener array de operaciones (manejar tanto array directo como objeto con operations)
 	let operationsArray = $derived(Array.isArray(operations) ? operations : operations.operations || []);
+	
+	// Variable para el monto actual de la caja
+	let currentAmount = $state(0);
+	
+	// Función para actualizar el monto actual de la caja
+	async function updateCurrentAmount() {
+		if (cashBoxForDate) {
+			currentAmount = await computeCurrentAmount(cashBoxForDate.id);
+			console.log('💰 Current amount updated:', currentAmount);
+		}
+	}
+	
+	// Función para manejar el botón "Actualizar Balance"
+	async function handleUpdateBalance() {
+		console.log('🔄 Manual balance update requested');
+		await updateCurrentAmount();
+	}
 </script>
 
 <div class="min-h-screen bg-gray-50">
 	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 		<!-- Header -->
 		<div class="mb-8">
-			<h1 class="text-3xl font-bold text-gray-900">Gestión de Cajas</h1>
-			<p class="mt-2 text-gray-600">Administra las cajas registradoras y sus operaciones</p>
-		</div>
-
-		<!-- Navegación de fechas -->
-		<div class="mb-6">
-			<DateNavigation
-				{currentDate}
-				{canNavigateBack}
-				{canNavigateForward}
-				onDateChange={navigateDate}
-				onToday={goToToday}
-			/>
+			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+				<div>
+					<h1 class="text-3xl font-bold text-gray-900">Gestión de Cajas</h1>
+					<p class="mt-2 text-gray-600">Administra las cajas registradoras y sus operaciones</p>
+				</div>
+				
+				<!-- Navegación de fechas -->
+				<div class="flex-shrink-0">
+					<DateNavigation
+						{currentDate}
+						{canNavigateBack}
+						{canNavigateForward}
+						onDateChange={navigateDate}
+						onToday={goToToday}
+					/>
+				</div>
+			</div>
 		</div>
 
 		<!-- Mensaje de error -->
@@ -423,13 +514,14 @@
 				{#if cashBoxForDate}
 					<CashBoxCard
 						cashBox={cashBoxForDate}
-						currentAmount={computeCurrentAmount(cashBoxForDate.id)}
+						currentAmount={currentAmount}
 						onClose={closeCashBox}
 						onReopen={(cb) => {
 							cashBoxToReopen = cb;
 							showReopenConfirmation = true;
 						}}
 						onOpen={showOpenCashBoxModal}
+						onUpdateBalance={handleUpdateBalance}
 					/>
 				{:else}
 					<!-- No hay caja para esta fecha -->

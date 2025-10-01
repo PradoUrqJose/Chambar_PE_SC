@@ -35,6 +35,17 @@
 
 	let errorMessage = $state('');
 	let isSubmitting = $state(false);
+	
+	// Filtrar detalles de operación según el tipo seleccionado
+	let filteredOperationDetails = $derived(
+		operationDetails.filter(detail => detail.type === formData.type)
+	);
+	
+	// Función para manejar el cambio de tipo de operación
+	function handleTypeChange() {
+		// Limpiar el detalle seleccionado cuando cambie el tipo
+		formData.operationDetailId = '';
+	}
 
 	// Función para resetear el formulario
 	function resetForm() {
@@ -139,6 +150,7 @@
 									type="radio"
 									bind:group={formData.type}
 									value="income"
+									onchange={handleTypeChange}
 									class="mr-2 text-green-600 focus:ring-green-500"
 								/>
 								<span class="text-sm text-gray-700">Ingreso</span>
@@ -148,6 +160,7 @@
 									type="radio"
 									bind:group={formData.type}
 									value="expense"
+									onchange={handleTypeChange}
 									class="mr-2 text-red-600 focus:ring-red-500"
 								/>
 								<span class="text-sm text-gray-700">Egreso</span>
@@ -194,7 +207,7 @@
 								required
 							>
 								<option value="">Seleccionar detalle</option>
-								{#each operationDetails as detail}
+								{#each filteredOperationDetails as detail}
 									<option value={detail.id}>{detail.name}</option>
 								{/each}
 							</select>
@@ -241,7 +254,7 @@
 							>
 								<option value="">Seleccionar empresa</option>
 								{#each companies as company}
-									<option value={company.id}>{company.razonSocial}</option>
+									<option value={company.id}>{company.name}</option>
 								{/each}
 							</select>
 						</div>

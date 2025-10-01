@@ -44,7 +44,7 @@
 	}
 </script>
 
-<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2 flex flex-col items-center justify-center">
 	<div class="flex items-center justify-between">
 		<!-- Navegación de fechas -->
 		<div class="flex items-center gap-4">
@@ -63,9 +63,6 @@
 				<div class="text-lg font-semibold text-gray-900">
 					{formatDatePeru(currentDate)}
 				</div>
-				{#if isToday(currentDate)}
-					<div class="text-sm text-blue-600 font-medium">Hoy</div>
-				{/if}
 			</div>
 
 			<button
@@ -79,26 +76,27 @@
 				</svg>
 			</button>
 		</div>
+		<!-- {#if isToday(currentDate)}
+		<div class="text-sm text-blue-600 font-medium">Hoy</div>
+	{/if} -->
 
 		<!-- Botón "Hoy" -->
-		<button
+		<!-- <button
 			onclick={onToday}
 			class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors font-medium text-sm"
 		>
 			Hoy
-		</button>
+		</button> -->
 	</div>
 
 	<!-- Información de navegación -->
-	<div class="mt-3 text-sm text-gray-600 text-center">
+	<div class="text-sm text-gray-600 text-center">
 		{#if !canNavigateBack && !canNavigateForward}
 			<span class="text-gray-500">No hay más fechas disponibles</span>
 		{:else if !canNavigateBack}
 			<span class="text-gray-500">No puedes navegar hacia atrás desde aquí</span>
 		{:else if !canNavigateForward}
-			<span class="text-gray-500">No puedes navegar hacia adelante desde aquí</span>
-		{:else}
-			<span class="text-gray-500">Usa las flechas para navegar entre fechas</span>
+			<span class="text-gray-500">No se puede ir adelante</span>
 		{/if}
 	</div>
 </div>

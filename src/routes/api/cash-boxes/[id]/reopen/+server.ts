@@ -5,7 +5,16 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async ({ params, request, platform }) => {
 	try {
 		const { id } = params;
-		const { reopenedAt } = await request.json();
+		
+		// Intentar obtener reopenedAt del body, si no existe usar la fecha actual
+		let reopenedAt;
+		try {
+			const body = await request.json();
+			reopenedAt = body.reopenedAt;
+		} catch (jsonError) {
+			// Si no hay body JSON, usar la fecha actual
+			reopenedAt = new Date().toISOString();
+		}
 		
 		const result = await reopenCashBox(platform, id, reopenedAt);
 		

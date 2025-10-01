@@ -22,10 +22,10 @@ export const mockCashBoxes: MockCashBox[] = [
 	{
 		id: '1',
 		name: 'Caja Principal',
-		status: 'open', // Estado unificado
-		openingAmount: 100.00,
-		openedAt: '2025-10-01T05:00:00.000Z', // 01-10-2025 00:00 Perú (hoy)
-		originalOpenedAt: '2025-10-01T05:00:00.000Z',
+		status: 'empty', // Estado unificado - disponible para abrir
+		openingAmount: 0.00, // Sin monto inicial
+		openedAt: null as string | null, // No abierta
+		originalOpenedAt: null as string | null,
 		closedAt: null as string | null,
 		reopenedAt: null as string | null,
 		businessDate: '2025-10-01', // Business date en zona horaria de Perú
@@ -67,10 +67,14 @@ export function updateMockCashBoxStatus(id: string, status: 'empty' | 'open' | '
 		cashBox.status = status;
 		
 		if (status === 'open' || status === 'reopened') {
-			cashBox.openingAmount = openingAmount;
+			// Solo cambiar openingAmount si es una apertura nueva (no reapertura)
+			if (status === 'open') {
+				cashBox.openingAmount = openingAmount;
+			}
+			// Para reapertura, mantener el openingAmount original
+			
 			cashBox.openedAt = openedAt || new Date().toISOString();
 			cashBox.closedAt = null;
-			cashBox.businessDate = toBusinessDate(cashBox.openedAt);
 			
 			// Si es reapertura, mantener la fecha original
 			if (status === 'reopened') {
@@ -79,9 +83,11 @@ export function updateMockCashBoxStatus(id: string, status: 'empty' | 'open' | '
 				if (!cashBox.originalOpenedAt) {
 					cashBox.originalOpenedAt = cashBox.openedAt || new Date().toISOString();
 				}
+				// Para reapertura, NO cambiar businessDate - mantener el original
 			} else {
-				// Si es apertura normal, establecer originalOpenedAt
+				// Si es apertura normal, establecer originalOpenedAt y businessDate
 				cashBox.originalOpenedAt = cashBox.openedAt || new Date().toISOString();
+				cashBox.businessDate = toBusinessDate(cashBox.openedAt);
 			}
 		} else if (status === 'closed') {
 			cashBox.closedAt = new Date().toISOString();
@@ -475,6 +481,18 @@ export const mockOperations = addBusinessDateToOperations([
 
 // Función para agregar nueva operación mock
 export function addMockOperation(data: any, createdAt?: string, updatedAt?: string) {
+	// Obtener la caja para usar su businessDate
+	const cashBox = mockCashBoxes.find(cb => cb.id === data.cashBoxId);
+	const businessDate = cashBox?.businessDate || toBusinessDate(createdAt || new Date().toISOString());
+	
+	console.log('🔄 Adding mock operation:', {
+		cashBoxId: data.cashBoxId,
+		cashBoxName: cashBox?.name,
+		businessDate: businessDate,
+		amount: data.amount,
+		type: data.type
+	});
+	
 	const newOperation = {
 		id: 'mock-op-' + Date.now(),
 		type: data.type,
@@ -487,7 +505,7 @@ export function addMockOperation(data: any, createdAt?: string, updatedAt?: stri
 		companyId: data.companyId || null,
 		createdAt: createdAt || new Date().toISOString(),
 		updatedAt: updatedAt || new Date().toISOString(),
-		businessDate: toBusinessDate(createdAt || new Date().toISOString())
+		businessDate: businessDate // Usar el businessDate de la caja
 	};
 	mockOperations.unshift(newOperation); // Agregar al inicio
 	return newOperation;
