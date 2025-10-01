@@ -51,26 +51,6 @@ export const mockPendingBalances: PendingBalance[] = [];
 // ============================================================================
 // CATÁLOGOS - DATOS ESENCIALES
 // ============================================================================
-
-export const mockOperationDetails = [
-	{ id: '1', name: 'Venta', type: 'income', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-	{ id: '2', name: 'Compra', type: 'expense', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-];
-
-export const mockResponsiblePersons = [
-	{ id: '1', name: 'Usuario Demo', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-];
-
-export const mockStands = [
-	{ id: '1', name: 'Stand 1', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-];
-
-export const mockCompanies = [
-	{ id: '1', razonSocial: 'Empresa Demo S.A.C.', ruc: '20123456789', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-];
-
-export const mockCompany = mockCompanies[0];
-
 // ============================================================================
 // FUNCIONES AUXILIARES
 // ============================================================================
@@ -454,86 +434,4 @@ export function debugPendingBalanceData() {
 // ============================================================================
 // CATÁLOGOS - FUNCIONES CRUD
 // ============================================================================
-
-export function addMockOperationDetail(name: string, type: 'income' | 'expense') {
-	const newDetail = {
-		id: 'mock-detail-' + Date.now(),
-		name,
-		type,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString()
-	};
-	mockOperationDetails.unshift(newDetail);
-	return newDetail;
-}
-
-export function updateMockOperationDetail(id: string, name?: string, type?: 'income' | 'expense') {
-	const detail = mockOperationDetails.find(d => d.id === id);
-	if (detail) {
-		if (name !== undefined) detail.name = name;
-		if (type !== undefined) detail.type = type;
-		detail.updatedAt = new Date().toISOString();
-	}
-}
-
-export function addMockResponsiblePerson(name: string) {
-	const newPerson = {
-		id: 'mock-person-' + Date.now(),
-		name,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString()
-	};
-	mockResponsiblePersons.unshift(newPerson);
-	return newPerson;
-}
-
-export function updateMockResponsiblePerson(id: string, name: string) {
-	const person = mockResponsiblePersons.find(p => p.id === id);
-	if (person) {
-		person.name = name;
-		person.updatedAt = new Date().toISOString();
-	}
-}
-
-export function addMockStand(name: string) {
-	const newStand = {
-		id: 'mock-stand-' + Date.now(),
-		name,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString()
-	};
-	mockStands.unshift(newStand);
-	return newStand;
-}
-
-export function updateMockStand(id: string, name: string) {
-	const stand = mockStands.find(s => s.id === id);
-	if (stand) {
-		stand.name = name;
-		stand.updatedAt = new Date().toISOString();
-	}
-}
-
-export function addMockCompany(razonSocial: string, ruc: string) {
-	const newCompany = {
-		id: 'mock-company-' + Date.now(),
-		razonSocial,
-		ruc,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString()
-	};
-	mockCompanies.unshift(newCompany);
-	Object.assign(mockCompany, newCompany);
-	return newCompany;
-}
-
-export function updateMockCompany(id: string, razonSocial?: string, ruc?: string) {
-	if (razonSocial !== undefined) {
-		mockCompany.razonSocial = razonSocial;
-	}
-	if (ruc !== undefined) {
-		mockCompany.ruc = ruc;
-	}
-	mockCompany.updatedAt = new Date().toISOString();
-}
 

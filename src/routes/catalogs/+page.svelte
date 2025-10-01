@@ -205,10 +205,8 @@
 			if (empresasResponse.ok) {
 				empresas = await empresasResponse.json();
 			} else {
-				// Fallback a datos mock
-				empresas = [
-					{ id: '1', razonSocial: 'Empresa Demo S.A.C.', ruc: '20123456789' }
-				];
+				// Sin datos fallback - empezar vacío
+				empresas = [];
 			}
 			
 			// Cargar stands
@@ -216,10 +214,8 @@
 			if (standsResponse.ok) {
 				stands = await standsResponse.json();
 			} else {
-				stands = [
-					{ id: '1', name: 'Stand A', location: 'Zona Norte', status: 'active' },
-					{ id: '2', name: 'Stand B', location: 'Zona Sur', status: 'active' }
-				];
+				// Sin datos fallback - empezar vacío
+				stands = [];
 			}
 			
 			// Cargar responsables
@@ -228,11 +224,9 @@
 				responsiblePersons = await responsibleResponse.json();
 				console.log('Responsables cargados desde API:', responsiblePersons);
 			} else {
-				responsiblePersons = [
-					{ id: '1', name: 'Juan Pérez', email: 'juan@example.com', phone: '999888777' },
-					{ id: '2', name: 'María García', email: 'maria@example.com', phone: '999888666' }
-				];
-				console.log('Responsables usando fallback:', responsiblePersons);
+				// Sin datos fallback - empezar vacío
+				responsiblePersons = [];
+				console.log('Responsables vacíos - empezar desde cero');
 			}
 			
 			// Cargar detalles de operación
@@ -241,11 +235,9 @@
 				operationDetails = await detailsResponse.json();
 				console.log('Detalles cargados desde API:', operationDetails);
 			} else {
-				operationDetails = [
-					{ id: '1', name: 'Venta de productos', type: 'income', category: 'ventas' },
-					{ id: '2', name: 'Pago a proveedor', type: 'expense', category: 'compras' }
-				];
-				console.log('Detalles usando fallback:', operationDetails);
+				// Sin datos fallback - empezar vacío
+				operationDetails = [];
+				console.log('Detalles vacíos - empezar desde cero');
 			}
 		} catch (error) {
 			errorMessage = 'Error al cargar los catálogos';

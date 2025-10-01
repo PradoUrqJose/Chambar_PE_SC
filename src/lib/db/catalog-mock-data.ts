@@ -36,73 +36,11 @@ export interface MockOperationDetail {
 	updatedAt: string;
 }
 
-// Datos mock centralizados
-export let mockCompanies: MockCompany[] = [
-	{ 
-		id: 'company-1', 
-		razonSocial: 'Empresa Demo S.A.C.', 
-		ruc: '20123456789', 
-		createdAt: new Date().toISOString(), 
-		updatedAt: new Date().toISOString() 
-	}
-];
-
-export let mockStands: MockStand[] = [
-	{ 
-		id: 'stand-1', 
-		name: 'Stand A', 
-		location: 'Zona Norte', 
-		status: 'active', 
-		createdAt: new Date().toISOString(), 
-		updatedAt: new Date().toISOString() 
-	},
-	{ 
-		id: 'stand-2', 
-		name: 'Stand B', 
-		location: 'Zona Sur', 
-		status: 'active', 
-		createdAt: new Date().toISOString(), 
-		updatedAt: new Date().toISOString() 
-	}
-];
-
-export let mockResponsiblePersons: MockResponsiblePerson[] = [
-	{ 
-		id: 'person-1', 
-		name: 'Juan Pérez', 
-		email: 'juan@example.com', 
-		phone: '999888777', 
-		createdAt: new Date().toISOString(), 
-		updatedAt: new Date().toISOString() 
-	},
-	{ 
-		id: 'person-2', 
-		name: 'María García', 
-		email: 'maria@example.com', 
-		phone: '999888666', 
-		createdAt: new Date().toISOString(), 
-		updatedAt: new Date().toISOString() 
-	}
-];
-
-export let mockOperationDetails: MockOperationDetail[] = [
-	{ 
-		id: 'detail-1', 
-		name: 'Venta', 
-		type: 'income', 
-		category: 'Ventas', 
-		createdAt: new Date().toISOString(), 
-		updatedAt: new Date().toISOString() 
-	},
-	{ 
-		id: 'detail-2', 
-		name: 'Compra', 
-		type: 'expense', 
-		category: 'Compras', 
-		createdAt: new Date().toISOString(), 
-		updatedAt: new Date().toISOString() 
-	}
-];
+// Datos mock centralizados - INICIAR VACÍOS PARA PRUEBAS REALES
+export let mockCompanies: MockCompany[] = [];
+export let mockStands: MockStand[] = [];
+export let mockResponsiblePersons: MockResponsiblePerson[] = [];
+export let mockOperationDetails: MockOperationDetail[] = [];
 
 // Función para generar ID único
 export function generateUniqueId(prefix: string): string {
