@@ -273,7 +273,7 @@
 
 			let response;
 			if (activeTab === 'empresas') {
-				response = await fetch('/api/companies', {
+				response = await fetch('/api/catalogs/companies', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ razonSocial: newItem.name, ruc: newItem.location })
@@ -324,7 +324,7 @@
 	// Funciones de carga específicas
 	async function loadCompanies() {
 		try {
-			const response = await fetch('/api/companies');
+			const response = await fetch('/api/catalogs/companies');
 			if (response.ok) {
 				const data = await response.json();
 				empresas = [...data]; // Forzar reactividad

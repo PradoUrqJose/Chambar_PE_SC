@@ -1,5 +1,5 @@
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockCompanies, addMockCompany, updateMockCompany } from '$lib/db/mock-data';
+import { mockCompanies, addCompany, updateCompany as updateMockCompany } from '$lib/db/catalog-mock-data';
 import type { Company, CreateCompanyData, UpdateCompanyData } from '$lib/types/company';
 
 export async function getCompany(platform: App.Platform): Promise<Company | null> {
@@ -40,7 +40,10 @@ export async function createCompany(
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
 		console.log('Modo desarrollo: simulando creación de empresa');
-		const newCompany = addMockCompany(data.razonSocial, data.ruc);
+		const newCompany = addCompany({
+			razonSocial: data.razonSocial,
+			ruc: data.ruc
+		});
 		return { success: true, id: newCompany.id };
 	}
 	
@@ -61,8 +64,11 @@ export async function updateCompany(
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
 		console.log('Modo desarrollo: simulando actualización de empresa');
-		updateMockCompany(id, data.razonSocial, data.ruc);
-		return { success: true };
+		const updatedCompany = updateMockCompany(id, {
+			razonSocial: data.razonSocial,
+			ruc: data.ruc
+		});
+		return { success: updatedCompany !== null };
 	}
 	
 	const updates = [];
