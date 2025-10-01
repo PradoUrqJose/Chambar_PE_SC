@@ -1,11 +1,25 @@
 <script lang="ts">
 	import type { Attachment } from '$lib/services/attachments-service';
+	import LazyImage from './LazyImage.svelte';
+	import { getThumbnail, isImageUrl } from '$lib/services/thumbnail-service';
+	import { compressImage, needsCompression, formatFileSize } from '$lib/services/compression-service';
+	import { getCachedFile, preloadFiles } from '$lib/services/cache-service';
 
 	interface Props {
 		attachments: Attachment[];
+		platform?: App.Platform;
+		enableCompression?: boolean;
+		enableThumbnails?: boolean;
+		enableCache?: boolean;
 	}
 
-	let { attachments }: Props = $props();
+	let { 
+		attachments, 
+		platform,
+		enableCompression = true,
+		enableThumbnails = true,
+		enableCache = true
+	}: Props = $props();
 
 	let showModal = $state(false);
 	let selectedAttachment = $state<Attachment | null>(null);
@@ -15,6 +29,8 @@
 	let searchQuery = $state('');
 	let showImageZoom = $state(false);
 	let zoomedImage = $state<Attachment | null>(null);
+	let thumbnails = $state<Record<string, string>>({});
+	let compressionStats = $state<Record<string, { original: number; compressed: number; ratio: number }>>({});
 
 	// Filtrar y paginar archivos
 	let filteredAttachments = $derived.by(() => {
@@ -110,12 +126,65 @@
 		return 'file';
 	}
 
-	function formatFileSize(bytes: number): string {
-		if (bytes === 0) return '0 Bytes';
-		const k = 1024;
-		const sizes = ['Bytes', 'KB', 'MB'];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+	// Pre-cargar thumbnails cuando se abren archivos
+	$effect(() => {
+		if (showModal && enableThumbnails && platform) {
+			const imageUrls = attachments
+				.filter(att => isImageUrl(att.url))
+				.map(att => att.url);
+			
+			if (imageUrls.length > 0) {
+				preloadThumbnails();
+			}
+		}
+	});
+
+	async function preloadThumbnails() {
+		if (!platform || !enableThumbnails) return;
+
+		const imageUrls = attachments
+			.filter(att => isImageUrl(att.url))
+			.map(att => att.url);
+
+		try {
+			const thumbnailMap = await Promise.all(
+				imageUrls.map(async (url) => {
+					const thumbnail = await getThumbnail(platform, url, {
+						width: 300,
+						height: 200,
+						quality: 80,
+						format: 'webp'
+					});
+					return [url, thumbnail] as [string, string];
+				})
+			);
+
+			thumbnails = Object.fromEntries(thumbnailMap);
+		} catch (error) {
+			console.warn('Error pre-cargando thumbnails:', error);
+		}
+	}
+
+	async function preloadCache() {
+		if (!enableCache) return;
+
+		const urls = attachments.map(att => att.url);
+		try {
+			await preloadFiles(urls);
+		} catch (error) {
+			console.warn('Error pre-cargando cache:', error);
+		}
+	}
+
+	function getThumbnailUrl(attachment: Attachment): string {
+		if (!enableThumbnails || !isImageUrl(attachment.url)) {
+			return attachment.url;
+		}
+		return thumbnails[attachment.url] || attachment.url;
+	}
+
+	function getCompressionInfo(attachment: Attachment) {
+		return compressionStats[attachment.url] || null;
 	}
 </script>
 
@@ -243,11 +312,10 @@
 									aria-label="Ver imagen en zoom: {attachment.fileName}"
 								>
 									{#if getFileIcon(attachment.fileType) === 'image'}
-										<img 
-											src={attachment.url} 
+										<LazyImage
+											src={getThumbnailUrl(attachment)}
 											alt={attachment.fileName}
 											class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
-											loading="lazy"
 										/>
 										<!-- Overlay de zoom -->
 										<div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
@@ -286,9 +354,17 @@
 										{attachment.fileName}
 									</p>
 									<div class="flex items-center justify-between mt-2">
-										<span class="text-xs text-gray-500">
-											{formatFileSize(attachment.fileSize)}
-										</span>
+										<div class="flex flex-col">
+											<span class="text-xs text-gray-500">
+												{formatFileSize(attachment.fileSize)}
+											</span>
+											{#if getCompressionInfo(attachment)}
+												{@const info = getCompressionInfo(attachment)}
+												<span class="text-xs text-green-600">
+													Comprimido: {formatFileSize(info.compressed)} ({Math.round((1 - info.ratio) * 100)}% menos)
+												</span>
+											{/if}
+										</div>
 										<a
 											href={attachment.url}
 											download={attachment.fileName}

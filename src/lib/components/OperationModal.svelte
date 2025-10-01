@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Operation } from '$lib/services/operations-service';
+	import { compressImage, compressFiles, needsCompression, formatFileSize } from '$lib/services/compression-service';
 
 	interface Props {
 		isOpen: boolean;
@@ -9,6 +10,7 @@
 		responsiblePersons: any[];
 		stands: any[];
 		companies: any[];
+		enableCompression?: boolean;
 	}
 
 	let { 
@@ -18,7 +20,8 @@
 		operationDetails, 
 		responsiblePersons, 
 		stands, 
-		companies 
+		companies,
+		enableCompression = true
 	}: Props = $props();
 
 	// Estado del formulario
@@ -37,6 +40,7 @@
 	let isSubmitting = $state(false);
 	let uploadedFiles = $state<File[]>([]);
 	let isUploading = $state(false);
+	let compressionStats = $state<Record<string, { original: number; compressed: number; ratio: number }>>({});
 	
 	// Filtrar detalles de operación según el tipo seleccionado
 	let filteredOperationDetails = $derived(
@@ -62,6 +66,7 @@
 			image: null
 		};
 		uploadedFiles = [];
+		compressionStats = {};
 		errorMessage = '';
 	}
 
@@ -141,11 +146,35 @@
 	}
 
 	// Función para manejar el cambio de archivos
-	function handleFilesChange(event: Event) {
+	async function handleFilesChange(event: Event) {
 		const target = event.target as HTMLInputElement;
 		if (target.files && target.files.length > 0) {
 			const newFiles = Array.from(target.files);
-			uploadedFiles = [...uploadedFiles, ...newFiles];
+			
+			if (enableCompression) {
+				// Comprimir archivos que lo necesiten
+				const compressionResults = await compressFiles(newFiles);
+				
+				// Actualizar archivos y estadísticas
+				const processedFiles = compressionResults.map((result: any) => 
+					result.success ? result.compressedFile! : newFiles.find(f => f.size === result.originalSize)!
+				);
+				
+				uploadedFiles = [...uploadedFiles, ...processedFiles];
+				
+				// Guardar estadísticas de compresión
+				compressionResults.forEach((result: any, index: number) => {
+					if (result.success) {
+						compressionStats[newFiles[index].name] = {
+							original: result.originalSize,
+							compressed: result.compressedSize,
+							ratio: result.compressionRatio
+						};
+					}
+				});
+			} else {
+				uploadedFiles = [...uploadedFiles, ...newFiles];
+			}
 		}
 	}
 
@@ -154,14 +183,6 @@
 		uploadedFiles = uploadedFiles.filter((_, i) => i !== index);
 	}
 
-	// Función para formatear tamaño de archivo
-	function formatFileSize(bytes: number): string {
-		if (bytes === 0) return '0 Bytes';
-		const k = 1024;
-		const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-	}
 </script>
 
 {#if isOpen}
@@ -360,9 +381,17 @@
 											<p class="text-sm font-medium text-gray-900 truncate" title={file.name}>
 												{file.name}
 											</p>
-											<p class="text-xs text-gray-500">
-												{formatFileSize(file.size)}
-											</p>
+											<div class="flex items-center gap-2">
+												<p class="text-xs text-gray-500">
+													{formatFileSize(file.size)}
+												</p>
+												{#if compressionStats[file.name]}
+													{@const stats = compressionStats[file.name]}
+													<span class="text-xs text-green-600 font-medium">
+														({Math.round((1 - stats.ratio) * 100)}% comprimido)
+													</span>
+												{/if}
+											</div>
 										</div>
 									</div>
 									
