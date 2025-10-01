@@ -1,5 +1,6 @@
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
 import { mockOperations, addMockOperation, mockCashBoxes } from '$lib/db/mock-data';
+import type { Attachment } from './attachments-service';
 
 export interface Operation {
 	id: string;
@@ -10,6 +11,7 @@ export interface Operation {
 	operationDetailId?: string;
 	responsiblePersonId?: string;
 	standId?: string;
+	attachments?: Attachment[];
 	createdAt: string;
 	updatedAt: string;
 	businessDate: string; // Business date en zona horaria de Perú
@@ -23,6 +25,7 @@ export interface CreateOperationData {
 	operationDetailId?: string;
 	responsiblePersonId?: string;
 	standId?: string;
+	attachments?: Attachment[];
 	reopenBatchId?: string;
 	isReopenOperation?: boolean;
 	createdAt?: string;

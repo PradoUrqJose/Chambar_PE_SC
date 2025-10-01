@@ -5,3 +5,8 @@ compatibility_date = "2024-01-15"
 binding = "DB"
 database_name = "chambar-dev"
 database_id = "81e6d59a-0dbf-4216-99e1-63d4326c8dab"
+
+[[r2_buckets]]
+binding = "ATTACHMENTS"
+bucket_name = "chambar-attachments"
+preview_bucket_name = "chambar-attachments"

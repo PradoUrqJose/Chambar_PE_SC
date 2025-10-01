@@ -35,6 +35,8 @@
 
 	let errorMessage = $state('');
 	let isSubmitting = $state(false);
+	let uploadedFiles = $state<File[]>([]);
+	let isUploading = $state(false);
 	
 	// Filtrar detalles de operación según el tipo seleccionado
 	let filteredOperationDetails = $derived(
@@ -59,6 +61,7 @@
 			companyId: '',
 			image: null
 		};
+		uploadedFiles = [];
 		errorMessage = '';
 	}
 
@@ -101,21 +104,63 @@
 		isSubmitting = true;
 		
 		try {
-			await onSubmit(formData);
+			// Subir archivos adjuntos si existen
+			const attachments = [];
+			if (uploadedFiles.length > 0) {
+				isUploading = true;
+				for (const file of uploadedFiles) {
+					const formDataUpload = new FormData();
+					formDataUpload.append('file', file);
+					formDataUpload.append('folder', 'operations');
+
+					const response = await fetch('/api/upload', {
+						method: 'POST',
+						body: formDataUpload
+					});
+
+					if (response.ok) {
+						const data = await response.json();
+						attachments.push(data.attachment);
+					}
+				}
+				isUploading = false;
+			}
+
+			// Enviar operación con archivos adjuntos
+			await onSubmit({
+				...formData,
+				attachments: attachments.length > 0 ? attachments : undefined
+			});
 			handleClose();
 		} catch (error) {
 			errorMessage = 'Error al crear la operación';
 		} finally {
 			isSubmitting = false;
+			isUploading = false;
 		}
 	}
 
-	// Función para manejar el cambio de imagen
-	function handleImageChange(event: Event) {
+	// Función para manejar el cambio de archivos
+	function handleFilesChange(event: Event) {
 		const target = event.target as HTMLInputElement;
-		if (target.files && target.files[0]) {
-			formData.image = target.files[0];
+		if (target.files && target.files.length > 0) {
+			const newFiles = Array.from(target.files);
+			uploadedFiles = [...uploadedFiles, ...newFiles];
 		}
+	}
+
+	// Función para remover un archivo
+	function removeFile(index: number) {
+		uploadedFiles = uploadedFiles.filter((_, i) => i !== index);
+	}
+
+	// Función para formatear tamaño de archivo
+	function formatFileSize(bytes: number): string {
+		if (bytes === 0) return '0 Bytes';
+		const k = 1024;
+		const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+		const i = Math.floor(Math.log(bytes) / Math.log(k));
+		return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 	}
 </script>
 
@@ -260,22 +305,83 @@
 						</div>
 					</div>
 
-					<!-- Imagen (opcional) -->
-					<div>
-						<label for="image" class="block text-sm font-medium text-gray-700 mb-2">Imagen (Opcional)</label>
+				<!-- Archivos adjuntos (opcional) -->
+				<div>
+					<label for="attachments" class="block text-sm font-medium text-gray-700 mb-2">
+						Archivos Adjuntos (opcional)
+						<span class="text-xs text-gray-500 font-normal ml-2">
+							Imágenes, PDFs, Excel (Max 10MB c/u)
+						</span>
+					</label>
+					
+					<!-- Botón para agregar archivos -->
+					<div class="mt-2">
+						<label for="attachments" class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 transition-colors">
+							<svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+							</svg>
+							<span class="text-sm font-medium text-gray-700">Adjuntar archivos</span>
+						</label>
 						<input
-							id="image"
+							id="attachments"
 							type="file"
-							accept="image/*"
-							onchange={handleImageChange}
-							class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+							accept="image/*,.pdf,.xlsx,.xls"
+							multiple
+							onchange={handleFilesChange}
+							class="hidden"
 						/>
-						{#if formData.image}
-							<div class="mt-2 text-sm text-gray-600">
-								Archivo seleccionado: {(formData.image as File).name}
-							</div>
-						{/if}
 					</div>
+
+					<!-- Lista de archivos seleccionados -->
+					{#if uploadedFiles.length > 0}
+						<div class="mt-3 space-y-2">
+							<p class="text-sm font-medium text-gray-700">
+								Archivos seleccionados ({uploadedFiles.length}):
+							</p>
+							{#each uploadedFiles as file, index}
+								<div class="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-md">
+									<div class="flex items-center gap-3 flex-1 min-w-0">
+										<!-- Icono según tipo de archivo -->
+										{#if file.type.startsWith('image/')}
+											<svg class="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+											</svg>
+										{:else if file.type.includes('pdf')}
+											<svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+											</svg>
+										{:else}
+											<svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+											</svg>
+										{/if}
+										
+										<div class="flex-1 min-w-0">
+											<p class="text-sm font-medium text-gray-900 truncate" title={file.name}>
+												{file.name}
+											</p>
+											<p class="text-xs text-gray-500">
+												{formatFileSize(file.size)}
+											</p>
+										</div>
+									</div>
+									
+									<!-- Botón para eliminar -->
+									<button
+										type="button"
+										onclick={() => removeFile(index)}
+										class="ml-3 text-red-500 hover:text-red-700 transition-colors flex-shrink-0"
+										aria-label="Eliminar archivo"
+									>
+										<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+										</svg>
+									</button>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
 
 					<!-- Mensaje de error -->
 					{#if errorMessage}
@@ -298,16 +404,30 @@
 						>
 							Cancelar
 						</button>
-						<button
-							type="submit"
-							disabled={isSubmitting}
-							class="px-4 py-2 text-sm font-medium text-white bg-[#17a34b] border border-transparent rounded-md hover:bg-[#15803d] focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-						>
-							{isSubmitting ? 'Creando...' : 'Crear Operación'}
-						</button>
-					</div>
-				</form>
-			</div>
+					<button
+						type="submit"
+						disabled={isSubmitting || isUploading}
+						class="px-4 py-2 text-sm font-medium text-white bg-[#17a34b] border border-transparent rounded-md hover:bg-[#15803d] focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+					>
+						{#if isUploading}
+							<svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+							</svg>
+							Subiendo archivos...
+						{:else if isSubmitting}
+							<svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+							</svg>
+							Creando...
+						{:else}
+							Crear Operación
+						{/if}
+					</button>
+				</div>
+			</form>
 		</div>
 	</div>
+</div>
 {/if}

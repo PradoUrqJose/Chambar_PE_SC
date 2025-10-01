@@ -4,15 +4,22 @@
 	interface Props {
 		isOpen: boolean;
 		cashBox: CashBox | null;
-		onConfirm: (cashBox: CashBox) => void;
+		reopenType?: 'default' | 'update-balance';
+		showPreventReopenWarning?: boolean;
+		onConfirm: (event: { cashBox: CashBox; reopenType: string; allocationNote: string }) => void;
 		onCancel: () => void;
-}
+	}
 
-	let { isOpen, cashBox, onConfirm, onCancel }: Props = $props();
+	let { 
+		isOpen, 
+		cashBox, 
+		reopenType = 'default',
+		showPreventReopenWarning = true,
+		onConfirm, 
+		onCancel 
+	}: Props = $props();
 
-export let reopenType: 'default' | 'update-balance' = 'default';
-export let showPreventReopenWarning: boolean = true;
-export let allocationNote: string = '';
+	let allocationNote = $state('');
 
 	// Función para formatear fecha en zona horaria de Perú
 	function formatDateTimePeru(dateStr: string): string {
