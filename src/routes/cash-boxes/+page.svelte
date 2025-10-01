@@ -93,8 +93,14 @@
 	// Función para obtener caja para la fecha actual
 	function getCashBoxForDate(date: Date): CashBox | null {
 		const targetDate = toPeruDateString(date);
-		const found = cashBoxes.find(cb => cb.businessDate === targetDate);
-		return found || null;
+		
+		// 1. Buscar caja abierta para esa fecha específica
+		const found = cashBoxes.find(cb => cb.businessDate === targetDate && cb.status === 'open');
+		if (found) return found;
+		
+		// 2. Si no hay caja abierta, devolver la caja principal vacía para que se pueda abrir
+		const emptyBox = cashBoxes.find(cb => cb.id === '1' && cb.status === 'empty');
+		return emptyBox || null;
 	}
 
 	// Helper para convertir fecha a string en zona horaria de Perú (YYYY-MM-DD)
