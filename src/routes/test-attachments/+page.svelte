@@ -154,25 +154,62 @@
 			</div>
 		</div>
 
+		<!-- Información sobre las Imágenes Reales -->
+		<div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-8">
+			<h3 class="text-lg font-semibold text-green-900 mb-2">🖼️ Sobre las Imágenes de Prueba</h3>
+			<div class="text-sm text-green-800 space-y-2">
+				<p><strong>✅ Son imágenes REALES:</strong> Las imágenes provienen de <a href="https://picsum.photos" target="_blank" class="text-green-700 underline hover:text-green-900">Picsum Photos</a>, un servicio gratuito de imágenes de alta calidad.</p>
+				<p><strong>📸 Contenido variado:</strong> Paisajes, retratos, objetos, arquitectura, naturaleza, etc.</p>
+				<p><strong>🔗 URLs directas:</strong> Puedes abrir cualquier imagen en una nueva pestaña para verla en tamaño completo.</p>
+				<p><strong>⚡ Optimizaciones activas:</strong> Cada imagen pasa por lazy loading, thumbnails y compresión automática.</p>
+			</div>
+		</div>
+
 		<!-- Lista de Archivos Actuales -->
 		<div class="bg-white rounded-lg shadow p-6 mb-8">
 			<h3 class="text-lg font-semibold text-gray-900 mb-4">📁 Archivos Actuales ({testAttachments.length})</h3>
 			{#if testAttachments.length > 0}
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 					{#each testAttachments as attachment, index}
-						<div class="border border-gray-200 rounded-lg p-3 bg-gray-50">
-							<div class="flex items-center gap-2 mb-2">
-								<svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-								</svg>
-								<span class="text-sm font-medium text-gray-900">#{index + 1}</span>
+						<div class="border border-gray-200 rounded-lg overflow-hidden bg-gray-50 hover:shadow-md transition-shadow">
+							<!-- Vista previa de la imagen -->
+							<div class="aspect-video bg-gray-100 flex items-center justify-center overflow-hidden">
+								<img 
+									src={attachment.url} 
+									alt={attachment.fileName}
+									class="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+									loading="lazy"
+								/>
 							</div>
-							<p class="text-sm text-gray-700 truncate" title={attachment.fileName}>
-								{attachment.fileName}
-							</p>
-							<p class="text-xs text-gray-500">
-								{Math.round(attachment.fileSize / 1024)} KB
-							</p>
+							
+							<!-- Info del archivo -->
+							<div class="p-3">
+								<div class="flex items-center gap-2 mb-2">
+									<svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+									</svg>
+									<span class="text-xs font-medium text-gray-900">#{index + 1}</span>
+								</div>
+								<p class="text-xs text-gray-700 truncate" title={attachment.fileName}>
+									{attachment.fileName}
+								</p>
+								<p class="text-xs text-gray-500">
+									{Math.round(attachment.fileSize / 1024)} KB
+								</p>
+								
+								<!-- Botón para ver imagen completa -->
+								<a 
+									href={attachment.url} 
+									target="_blank" 
+									rel="noopener noreferrer"
+									class="inline-flex items-center gap-1 mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium"
+								>
+									<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+									</svg>
+									Ver imagen
+								</a>
+							</div>
 						</div>
 					{/each}
 				</div>
