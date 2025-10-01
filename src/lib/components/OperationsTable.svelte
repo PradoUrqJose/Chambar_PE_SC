@@ -12,6 +12,11 @@
 		currentPage?: number;
 		onPageChange?: (page: number) => void;
 		showPagination?: boolean;
+		// Nuevos props para tabla general de operaciones
+		showAddButton?: boolean;
+		defaultRowsPerPage?: number;
+		showCashBoxInfo?: boolean;
+		cashBoxes?: any[];
 	}
 
 	let { 
@@ -21,7 +26,12 @@
 		onAddOperation,
 		currentPage = 1,
 		onPageChange = () => {},
-		showPagination = true
+		showPagination = true,
+		// Nuevos props con valores por defecto
+		showAddButton = true,
+		defaultRowsPerPage = 5,
+		showCashBoxInfo = false,
+		cashBoxes = []
 	}: Props = $props();
 
 	// Calcular operaciones paginadas
@@ -34,6 +44,9 @@
 	});
 
 	let totalPages = $derived.by(() => Math.ceil(operations.length / rowsPerPage));
+
+	// Calcular colspan dinámico
+	let tableColspan = $derived(showCashBoxInfo ? 8 : 6);
 
 	// Función para formatear fecha en zona horaria de Perú
 	function formatDatePeru(dateStr: string): string {
@@ -55,13 +68,53 @@
 
 	// Opciones para filas por página
 	const rowsPerPageOptions = [5, 10, 20, 30, 50];
+
+	// Función para obtener información de la caja por ID
+	function getCashBoxInfo(cashBoxId: string) {
+		const cashBox = cashBoxes.find(cb => cb.id === cashBoxId);
+		return cashBox || null;
+	}
+
+	// Función para formatear fecha de caja
+	function formatCashBoxDate(dateStr: string): string {
+		return new Date(dateStr).toLocaleDateString('es-PE', {
+			day: '2-digit',
+			month: '2-digit',
+			year: 'numeric',
+			timeZone: 'America/Lima'
+		});
+	}
+
+	// Función para obtener el color del estado de la caja
+	function getStatusColor(status: string): string {
+		switch (status) {
+			case 'open': return 'text-green-600 bg-green-100';
+			case 'closed': return 'text-gray-600 bg-gray-100';
+			case 'reopened': return 'text-yellow-600 bg-yellow-100';
+			case 'empty': return 'text-blue-600 bg-blue-100';
+			default: return 'text-gray-600 bg-gray-100';
+		}
+	}
+
+	// Función para obtener el texto del estado de la caja
+	function getStatusText(status: string): string {
+		switch (status) {
+			case 'open': return 'Abierta';
+			case 'closed': return 'Cerrada';
+			case 'reopened': return 'Reabierta';
+			case 'empty': return 'Vacía';
+			default: return 'Desconocido';
+		}
+	}
 </script>
 
 <div class="bg-white rounded-lg shadow-sm border border-gray-200">
 	<!-- Header de la tabla -->
 	<div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
 		<div class="flex justify-between items-center">
-			<h3 class="text-lg font-semibold text-gray-900">Operaciones del Día</h3>
+			<h3 class="text-lg font-semibold text-gray-900">
+				{showCashBoxInfo ? 'Todas las Operaciones' : 'Operaciones del Día'}
+			</h3>
 			<div class="flex items-center gap-4">
 				<!-- Selector de filas por página -->
 				<div class="flex items-center gap-2">
@@ -81,16 +134,18 @@
 					</select>
 				</div>
 				
-				<!-- Botón Agregar Operación -->
-				<button
-					onclick={onAddOperation}
-					class="px-4 py-2 bg-[#17a34b] text-white rounded-lg hover:bg-[#15803d] focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors font-medium text-sm flex items-center gap-2"
-				>
-					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-					</svg>
-					Agregar Operación
-				</button>
+				<!-- Botón Agregar Operación (condicional) -->
+				{#if showAddButton}
+					<button
+						onclick={onAddOperation}
+						class="px-4 py-2 bg-[#17a34b] text-white rounded-lg hover:bg-[#15803d] focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors font-medium text-sm flex items-center gap-2"
+					>
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+						</svg>
+						Agregar Operación
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>
@@ -109,6 +164,14 @@
 					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
 						Monto
 					</th>
+					{#if showCashBoxInfo}
+						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+							Fecha de Caja
+						</th>
+						<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+							Estado de Caja
+						</th>
+					{/if}
 					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
 						Fecha
 					</th>
@@ -123,12 +186,13 @@
 			<tbody class="bg-white divide-y divide-gray-200">
 				{#if operations.length === 0}
 					<tr>
-						<td colspan="6" class="px-4 py-8 text-center text-gray-500">
+						<td colspan={tableColspan} class="px-4 py-8 text-center text-gray-500">
 							No hay operaciones para mostrar
 						</td>
 					</tr>
 				{:else}
 					{#each paginatedOperations as operation}
+						{@const cashBoxInfo = getCashBoxInfo(operation.cashBoxId)}
 						<tr class="hover:bg-gray-50">
 							<td class="px-4 py-3 border-r border-gray-200">
 								<div class="flex items-center gap-2">
@@ -155,20 +219,38 @@
 									{operation.type === 'income' ? '+' : '-'}S/. {operation.amount.toFixed(2)}
 								</div>
 							</td>
-						<td class="px-4 py-3 border-r border-gray-200">
-							<div class="text-sm text-gray-900">
-								{formatDatePeru(operation.createdAt)}
-							</div>
-						</td>
-						<td class="px-4 py-3 border-r border-gray-200">
-							<div class="text-sm text-gray-500">
-								{formatTimePeru(operation.createdAt)}
-							</div>
-						</td>
-						<td class="px-4 py-3 text-center">
-							<AttachmentsPreview attachments={operation.attachments || []} />
-						</td>
-					</tr>
+							{#if showCashBoxInfo}
+								<td class="px-4 py-3 border-r border-gray-200">
+									<div class="text-sm text-gray-900">
+										{cashBoxInfo ? formatCashBoxDate(cashBoxInfo.businessDate) : 'N/A'}
+									</div>
+								</td>
+								<td class="px-4 py-3 border-r border-gray-200">
+									<div class="text-sm">
+										{#if cashBoxInfo}
+											<span class="px-2 py-1 rounded-full text-xs font-medium {getStatusColor(cashBoxInfo.status)}">
+												{getStatusText(cashBoxInfo.status)}
+											</span>
+										{:else}
+											<span class="text-gray-500">N/A</span>
+										{/if}
+									</div>
+								</td>
+							{/if}
+							<td class="px-4 py-3 border-r border-gray-200">
+								<div class="text-sm text-gray-900">
+									{formatDatePeru(operation.createdAt)}
+								</div>
+							</td>
+							<td class="px-4 py-3 border-r border-gray-200">
+								<div class="text-sm text-gray-500">
+									{formatTimePeru(operation.createdAt)}
+								</div>
+							</td>
+							<td class="px-4 py-3 text-center">
+								<AttachmentsPreview attachments={operation.attachments || []} />
+							</td>
+						</tr>
 					{/each}
 				{/if}
 			</tbody>
