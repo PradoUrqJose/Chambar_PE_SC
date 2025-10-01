@@ -78,6 +78,7 @@
 	let showDeleteModal = $state(false);
 	let selectedItem = $state<any>(null);
 	let itemToDelete = $state<any>(null);
+	let editFormData = $state<any>({});
 
 	// Funciones de manejo de eventos
 	function handlePageChange(page: number) {
@@ -91,6 +92,8 @@
 
 	function handleEdit(item: any) {
 		selectedItem = item;
+		// Crear una copia para editar (evita actualización en tiempo real)
+		editFormData = { ...item };
 		showEditModal = true;
 	}
 
@@ -107,30 +110,30 @@
 			const endpoint = getCurrentEndpoint();
 			const url = `${endpoint}/${selectedItem.id}`;
 			
-			// Preparar datos según el tipo de catálogo
+			// Preparar datos según el tipo de catálogo usando editFormData
 			let updateData: any = {};
 			if (activeTab === 'empresas') {
 				updateData = {
-					razonSocial: selectedItem.razonSocial,
-					ruc: selectedItem.ruc
+					razonSocial: editFormData.razonSocial,
+					ruc: editFormData.ruc
 				};
 			} else if (activeTab === 'stands') {
 				updateData = {
-					name: selectedItem.name,
-					location: selectedItem.location,
-					status: selectedItem.status
+					name: editFormData.name,
+					location: editFormData.location,
+					status: editFormData.status
 				};
 			} else if (activeTab === 'responsible-persons') {
 				updateData = {
-					name: selectedItem.name,
-					email: selectedItem.email,
-					phone: selectedItem.phone
+					name: editFormData.name,
+					email: editFormData.email,
+					phone: editFormData.phone
 				};
 			} else if (activeTab === 'operation-details') {
 				updateData = {
-					name: selectedItem.name,
-					type: selectedItem.type,
-					category: selectedItem.category
+					name: editFormData.name,
+					type: editFormData.type,
+					category: editFormData.category
 				};
 			}
 
@@ -142,9 +145,10 @@
 
 			if (response.ok) {
 				successMessage = 'Elemento actualizado correctamente';
-				await loadCatalogs();
+				await loadCurrentCatalog();
 				showEditModal = false;
 				selectedItem = null;
+				editFormData = {};
 			} else {
 				const errorData = await response.json();
 				errorMessage = errorData.error || 'Error al actualizar el elemento';
@@ -175,7 +179,7 @@
 
 			if (response.ok) {
 				successMessage = selectedItem ? 'Elemento actualizado correctamente' : 'Elemento creado correctamente';
-				await loadCatalogs();
+				await loadCurrentCatalog();
 				showCreateForm = false;
 				showEditModal = false;
 				selectedItem = null;
@@ -200,7 +204,7 @@
 
 			if (response.ok) {
 				successMessage = 'Elemento eliminado correctamente';
-				await loadCatalogs();
+				await loadCurrentCatalog();
 			} else {
 				const errorData = await response.json();
 				errorMessage = errorData.error || 'Error al eliminar el elemento';
@@ -261,7 +265,6 @@
 			if (empresasResponse.ok) {
 				empresas = await empresasResponse.json();
 			} else {
-				// Sin datos fallback - empezar vacío
 				empresas = [];
 			}
 			
@@ -270,7 +273,6 @@
 			if (standsResponse.ok) {
 				stands = await standsResponse.json();
 			} else {
-				// Sin datos fallback - empezar vacío
 				stands = [];
 			}
 			
@@ -278,26 +280,54 @@
 			const responsibleResponse = await fetch('/api/catalogs/responsible-persons');
 			if (responsibleResponse.ok) {
 				responsiblePersons = await responsibleResponse.json();
-				console.log('Responsables cargados desde API:', responsiblePersons);
 			} else {
-				// Sin datos fallback - empezar vacío
 				responsiblePersons = [];
-				console.log('Responsables vacíos - empezar desde cero');
 			}
 			
 			// Cargar detalles de operación
 			const detailsResponse = await fetch('/api/catalogs/operation-details');
 			if (detailsResponse.ok) {
 				operationDetails = await detailsResponse.json();
-				console.log('Detalles cargados desde API:', operationDetails);
 			} else {
-				// Sin datos fallback - empezar vacío
 				operationDetails = [];
-				console.log('Detalles vacíos - empezar desde cero');
 			}
 		} catch (error) {
 			errorMessage = 'Error al cargar los catálogos';
 			console.error('Error loading catalogs:', error);
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	// Cargar solo el catálogo activo (más eficiente)
+	async function loadCurrentCatalog() {
+		try {
+			isLoading = true;
+			
+			if (activeTab === 'empresas') {
+				const response = await fetch('/api/catalogs/companies');
+				if (response.ok) {
+					empresas = await response.json();
+				}
+			} else if (activeTab === 'stands') {
+				const response = await fetch('/api/catalogs/stands');
+				if (response.ok) {
+					stands = await response.json();
+				}
+			} else if (activeTab === 'responsible-persons') {
+				const response = await fetch('/api/catalogs/responsible-persons');
+				if (response.ok) {
+					responsiblePersons = await response.json();
+				}
+			} else if (activeTab === 'operation-details') {
+				const response = await fetch('/api/catalogs/operation-details');
+				if (response.ok) {
+					operationDetails = await response.json();
+				}
+			}
+		} catch (error) {
+			errorMessage = 'Error al cargar el catálogo';
+			console.error('Error loading current catalog:', error);
 		} finally {
 			isLoading = false;
 		}
@@ -596,7 +626,7 @@
 							<input
 								id="edit-empresa-razon"
 								type="text"
-								bind:value={selectedItem.razonSocial}
+								bind:value={editFormData.razonSocial}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 								placeholder="Ingrese la razón social"
 							/>
@@ -606,7 +636,7 @@
 							<input
 								id="edit-empresa-ruc"
 								type="text"
-								bind:value={selectedItem.ruc}
+								bind:value={editFormData.ruc}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 								placeholder="Ingrese el RUC"
 							/>
@@ -619,7 +649,7 @@
 							<input
 								id="edit-stand-name"
 								type="text"
-								bind:value={selectedItem.name}
+								bind:value={editFormData.name}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 								placeholder="Ingrese el nombre del stand"
 							/>
@@ -629,7 +659,7 @@
 							<input
 								id="edit-stand-location"
 								type="text"
-								bind:value={selectedItem.location}
+								bind:value={editFormData.location}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 								placeholder="Ingrese la ubicación"
 							/>
@@ -638,7 +668,7 @@
 							<label for="edit-stand-status" class="block text-sm font-medium text-gray-700 mb-2">Estado</label>
 							<select
 								id="edit-stand-status"
-								bind:value={selectedItem.status}
+								bind:value={editFormData.status}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 							>
 								<option value="active">Activo</option>
@@ -653,7 +683,7 @@
 							<input
 								id="edit-person-name"
 								type="text"
-								bind:value={selectedItem.name}
+								bind:value={editFormData.name}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 								placeholder="Ingrese el nombre"
 							/>
@@ -663,7 +693,7 @@
 							<input
 								id="edit-person-email"
 								type="email"
-								bind:value={selectedItem.email}
+								bind:value={editFormData.email}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 								placeholder="Ingrese el email"
 							/>
@@ -673,7 +703,7 @@
 							<input
 								id="edit-person-phone"
 								type="text"
-								bind:value={selectedItem.phone}
+								bind:value={editFormData.phone}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 								placeholder="Ingrese el teléfono"
 							/>
@@ -686,7 +716,7 @@
 							<input
 								id="edit-detail-name"
 								type="text"
-								bind:value={selectedItem.name}
+								bind:value={editFormData.name}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 								placeholder="Ingrese el nombre del detalle"
 							/>
@@ -695,7 +725,7 @@
 							<label for="edit-detail-type" class="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
 							<select
 								id="edit-detail-type"
-								bind:value={selectedItem.type}
+								bind:value={editFormData.type}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 							>
 								<option value="income">Ingreso</option>
@@ -707,7 +737,7 @@
 							<input
 								id="edit-detail-category"
 								type="text"
-								bind:value={selectedItem.category}
+								bind:value={editFormData.category}
 								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 								placeholder="Ingrese la categoría"
 							/>
@@ -717,7 +747,7 @@
 				
 				<div class="flex justify-end space-x-3 mt-6">
 					<button
-						onclick={() => { showEditModal = false; selectedItem = null; }}
+						onclick={() => { showEditModal = false; selectedItem = null; editFormData = {}; }}
 						class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
 					>
 						Cancelar
