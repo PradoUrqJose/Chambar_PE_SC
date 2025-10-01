@@ -98,6 +98,22 @@
 		// TODO: Implementar modal de creación
 	}
 
+	// Obtener el nombre del botón según el tab activo
+	function getAddButtonText() {
+		switch (activeTab) {
+			case 'empresas':
+				return 'Nueva Empresa';
+			case 'stands':
+				return 'Nuevo Stand';
+			case 'responsible-persons':
+				return 'Nuevo Responsable';
+			case 'operation-details':
+				return 'Nuevo Detalle';
+			default:
+				return 'Nuevo Elemento';
+		}
+	}
+
 	// Cargar datos de catálogos
 	async function loadCatalogs() {
 		try {
@@ -303,10 +319,10 @@
 			<div></div>
 			<div class="flex space-x-2">
 				<button
-					onclick={() => showCreateForm = true}
+					onclick={handleAdd}
 					class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
 				>
-					+ Nuevo {getCurrentTabName()}
+					+ {getAddButtonText()}
 				</button>
 			</div>
 		</div>
@@ -384,7 +400,6 @@
 				onItemsPerPageChange={handleItemsPerPageChange}
 				onEdit={handleEdit}
 				onDelete={handleDelete}
-				onAdd={handleAdd}
 				isLoading={isLoading}
 				errorMessage={errorMessage}
 				successMessage={successMessage}
@@ -400,7 +415,6 @@
 				onItemsPerPageChange={handleItemsPerPageChange}
 				onEdit={handleEdit}
 				onDelete={handleDelete}
-				onAdd={handleAdd}
 				isLoading={isLoading}
 				errorMessage={errorMessage}
 				successMessage={successMessage}
@@ -416,7 +430,6 @@
 				onItemsPerPageChange={handleItemsPerPageChange}
 				onEdit={handleEdit}
 				onDelete={handleDelete}
-				onAdd={handleAdd}
 				isLoading={isLoading}
 				errorMessage={errorMessage}
 				successMessage={successMessage}
@@ -432,7 +445,6 @@
 				onItemsPerPageChange={handleItemsPerPageChange}
 				onEdit={handleEdit}
 				onDelete={handleDelete}
-				onAdd={handleAdd}
 				isLoading={isLoading}
 				errorMessage={errorMessage}
 				successMessage={successMessage}

@@ -46,10 +46,9 @@
 		errorMessage?: string;
 		successMessage?: string;
 		
-		// Configuración
-		emptyMessage?: string;
-		showAddButton?: boolean;
-		showPagination?: boolean;
+	// Configuración
+	emptyMessage?: string;
+	showPagination?: boolean;
 	}
 
 	// ============================================================================
@@ -72,7 +71,6 @@
 		errorMessage = '',
 		successMessage = '',
 		emptyMessage = 'No hay elementos para mostrar',
-		showAddButton = true,
 		showPagination = true
 	}: Props = $props();
 
@@ -164,21 +162,8 @@
 
 <div class="bg-white shadow rounded-lg">
 	<!-- Header -->
-	<div class="px-6 py-4 border-b border-gray-200">
-		<div class="flex justify-between items-center">
-			<h3 class="text-lg font-medium text-gray-900">{title}</h3>
-			{#if showAddButton}
-				<button
-					onclick={onAdd}
-					class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-				>
-					<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-					</svg>
-					Agregar
-				</button>
-			{/if}
-		</div>
+	<div class="px-6 py-6 border-b border-gray-200">
+		<h3 class="text-lg font-medium text-gray-900">{title}</h3>
 	</div>
 
 	<!-- Mensajes de estado -->
@@ -302,16 +287,79 @@
 			</table>
 		</div>
 
-		<!-- Paginación -->
-		{#if showPagination && totalPages > 1}
+		<!-- Controles de paginación -->
+		{#if showPagination}
 			<div class="px-6 py-4 border-t border-gray-200">
-				<Pagination
-					currentPage={currentPage}
-					totalPages={totalPages}
-					totalItems={items.length}
-					itemsPerPage={itemsPerPage}
-					onPageChange={onPageChange}
-				/>
+				<div class="flex items-center justify-between">
+					<!-- Selector de filas por página -->
+					<div class="flex items-center space-x-2">
+						<span class="text-sm text-gray-700">Mostrar:</span>
+						<select
+							value={itemsPerPage}
+							onchange={(e) => {
+								const target = e.target as HTMLSelectElement;
+								onItemsPerPageChange(Number(target.value));
+							}}
+							class="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+						>
+							<option value="5">5</option>
+							<option value="10">10</option>
+							<option value="20">20</option>
+							<option value="50">50</option>
+							<option value="100">100</option>
+						</select>
+						<span class="text-sm text-gray-700">de {items.length} elementos</span>
+					</div>
+
+					<!-- Información de paginación -->
+					{#if totalPages > 1}
+						<div class="flex items-center space-x-2">
+							<span class="text-sm text-gray-700">
+								Página {currentPage} de {totalPages}
+							</span>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Controles de navegación -->
+				{#if totalPages > 1}
+					<div class="mt-4 flex items-center justify-center space-x-2">
+						<!-- Botón Anterior -->
+						<button
+							onclick={() => onPageChange(currentPage - 1)}
+							disabled={currentPage <= 1}
+							class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							Anterior
+						</button>
+
+						<!-- Números de página -->
+						{#each Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+							const startPage = Math.max(1, currentPage - 2);
+							const pageNum = startPage + i;
+							return pageNum <= totalPages ? pageNum : null;
+						}).filter((pageNum): pageNum is number => pageNum !== null) as pageNum}
+							<button
+								onclick={() => onPageChange(pageNum)}
+								class="px-3 py-2 text-sm font-medium rounded-md
+									{pageNum === currentPage 
+										? 'text-white bg-green-600 border border-green-600' 
+										: 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'}"
+							>
+								{pageNum}
+							</button>
+						{/each}
+
+						<!-- Botón Siguiente -->
+						<button
+							onclick={() => onPageChange(currentPage + 1)}
+							disabled={currentPage >= totalPages}
+							class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							Siguiente
+						</button>
+					</div>
+				{/if}
 			</div>
 		{/if}
 	{/if}
