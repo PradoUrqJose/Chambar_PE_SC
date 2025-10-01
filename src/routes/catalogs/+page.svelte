@@ -80,6 +80,14 @@
 	let itemToDelete = $state<any>(null);
 	let editFormData = $state<any>({});
 
+	// Estado para controlar carga lazy
+	let loadedCatalogs = $state({
+		empresas: false,
+		stands: false,
+		'responsible-persons': false,
+		'operation-details': false
+	});
+
 	// Funciones de manejo de eventos
 	function handlePageChange(page: number) {
 		currentPage = page;
@@ -88,6 +96,17 @@
 	function handleItemsPerPageChange(newItemsPerPage: number) {
 		itemsPerPage = newItemsPerPage;
 		currentPage = 1; // Reset to first page
+	}
+
+	// Manejar cambio de pestañas con carga lazy
+	async function handleTabChange(newTab: string) {
+		activeTab = newTab;
+		currentPage = 1; // Reset pagination
+		
+		// Solo cargar si no ha sido cargado antes
+		if (!loadedCatalogs[newTab as keyof typeof loadedCatalogs]) {
+			await loadCurrentCatalog();
+		}
 	}
 
 	function handleEdit(item: any) {
@@ -308,21 +327,25 @@
 				const response = await fetch('/api/catalogs/companies');
 				if (response.ok) {
 					empresas = await response.json();
+					loadedCatalogs.empresas = true;
 				}
 			} else if (activeTab === 'stands') {
 				const response = await fetch('/api/catalogs/stands');
 				if (response.ok) {
 					stands = await response.json();
+					loadedCatalogs.stands = true;
 				}
 			} else if (activeTab === 'responsible-persons') {
 				const response = await fetch('/api/catalogs/responsible-persons');
 				if (response.ok) {
 					responsiblePersons = await response.json();
+					loadedCatalogs['responsible-persons'] = true;
 				}
 			} else if (activeTab === 'operation-details') {
 				const response = await fetch('/api/catalogs/operation-details');
 				if (response.ok) {
 					operationDetails = await response.json();
+					loadedCatalogs['operation-details'] = true;
 				}
 			}
 		} catch (error) {
@@ -457,7 +480,10 @@
 	}
 
 	onMount(() => {
-		loadCatalogs();
+		// Cargar solo el catálogo inicial (empresas por defecto)
+		loadCurrentCatalog();
+		// Marcar como cargado para evitar recarga innecesaria
+		loadedCatalogs.empresas = true;
 	});
 </script>
 
@@ -509,7 +535,7 @@
 		<div class="border-b border-gray-200 mb-6">
 			<nav class="-mb-px flex space-x-8">
 				<button
-					onclick={() => activeTab = 'empresas'}
+					onclick={() => handleTabChange('empresas')}
 					class="py-2 px-1 border-b-2 font-medium text-sm
 						{activeTab === 'empresas' 
 							? 'border-green-500 text-green-600' 
@@ -518,7 +544,7 @@
 					Empresas
 				</button>
 				<button
-					onclick={() => activeTab = 'stands'}
+					onclick={() => handleTabChange('stands')}
 					class="py-2 px-1 border-b-2 font-medium text-sm
 						{activeTab === 'stands' 
 							? 'border-green-500 text-green-600' 
@@ -527,7 +553,7 @@
 					Stands
 				</button>
 				<button
-					onclick={() => activeTab = 'responsible-persons'}
+					onclick={() => handleTabChange('responsible-persons')}
 					class="py-2 px-1 border-b-2 font-medium text-sm
 						{activeTab === 'responsible-persons' 
 							? 'border-green-500 text-green-600' 
@@ -536,7 +562,7 @@
 					Responsables
 				</button>
 				<button
-					onclick={() => activeTab = 'operation-details'}
+					onclick={() => handleTabChange('operation-details')}
 					class="py-2 px-1 border-b-2 font-medium text-sm
 						{activeTab === 'operation-details' 
 							? 'border-green-500 text-green-600' 
@@ -608,6 +634,14 @@
 				errorMessage={errorMessage}
 				successMessage={successMessage}
 			/>
+		{/if}
+
+		<!-- Indicador de loading para cambio de pestañas -->
+		{#if isLoading && !loadedCatalogs[activeTab as keyof typeof loadedCatalogs]}
+			<div class="flex justify-center items-center py-8">
+				<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+				<span class="ml-2 text-gray-600">Cargando {getCurrentTabName()}...</span>
+			</div>
 		{/if}
 	{/if}
 
