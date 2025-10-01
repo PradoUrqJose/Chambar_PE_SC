@@ -35,47 +35,17 @@ export const mockCashBoxes: MockCashBox[] = [
 	{
 		id: '1',
 		name: 'Caja Principal',
-		status: 'empty', // Estado unificado - disponible para abrir
+		status: 'empty', // Estado inicial vacío para que el usuario lo abra
 		openingAmount: 0.00, // Sin monto inicial
-		pendingBalance: 0.00, // ← Nuevo campo
-		pendingBalanceHandled: true, // ← Nuevo campo
+		pendingBalance: 0.00, // Sin saldo pendiente
+		pendingBalanceHandled: true, // Sin saldo pendiente
 		openedAt: null as string | null, // No abierta
 		originalOpenedAt: null as string | null,
 		closedAt: null as string | null,
 		reopenedAt: null as string | null,
-		businessDate: '2025-10-01', // Business date en zona horaria de Perú
+		businessDate: null as string | null, // Sin fecha de negocio aún
 		createdAt: '2025-10-01T05:00:00.000Z',
 		updatedAt: '2025-10-01T05:00:00.000Z'
-	},
-	{
-		id: '2',
-		name: 'Caja 27 Septiembre',
-		status: 'closed', // Estado unificado
-		openingAmount: 200.00,
-		pendingBalance: 0.00, // ← Sin saldo pendiente (ya manejado)
-		pendingBalanceHandled: true, // ← Ya manejado
-		openedAt: '2025-09-27T05:00:00.000Z', // 27-09-2025 00:00 Perú
-		originalOpenedAt: '2025-09-27T05:00:00.000Z', // 27-09-2025 00:00 Perú
-		closedAt: '2025-09-27T13:00:00.000Z', // 27-09-2025 08:00 Perú
-		reopenedAt: null as string | null,
-		businessDate: '2025-09-27', // Business date en zona horaria de Perú
-		createdAt: '2025-09-27T05:00:00.000Z',
-		updatedAt: '2025-09-27T13:00:00.000Z'
-	},
-	{
-		id: '3',
-		name: 'Caja 30 Septiembre',
-		status: 'closed', // Estado unificado
-		openingAmount: 150.00,
-		pendingBalance: 288.00, // ← Saldo pendiente de 288 soles (calculado correctamente)
-		pendingBalanceHandled: false, // ← No manejado aún
-		openedAt: '2025-09-30T05:00:00.000Z', // 30-09-2025 00:00 Perú
-		originalOpenedAt: '2025-09-30T05:00:00.000Z', // 30-09-2025 00:00 Perú
-		closedAt: '2025-09-30T13:00:00.000Z', // 30-09-2025 08:00 Perú
-		reopenedAt: null as string | null,
-		businessDate: '2025-09-30', // Business date en zona horaria de Perú
-		createdAt: '2025-09-30T05:00:00.000Z',
-		updatedAt: '2025-09-30T13:00:00.000Z'
 	}
 ];
 
@@ -111,6 +81,18 @@ export function updateMockCashBoxStatus(id: string, status: 'empty' | 'open' | '
 		} else if (status === 'closed') {
 			cashBox.closedAt = new Date().toISOString();
 			cashBox.reopenedAt = null;
+			
+			// Al cerrar, calcular el saldo pendiente basado en las operaciones
+			const currentBalance = computeCurrentAmount(id);
+			if (currentBalance > 0) {
+				cashBox.pendingBalance = currentBalance;
+				cashBox.pendingBalanceHandled = false;
+				console.log(`💰 Caja ${cashBox.name} cerrada con saldo pendiente: ${currentBalance} soles`);
+			} else {
+				cashBox.pendingBalance = 0;
+				cashBox.pendingBalanceHandled = true;
+				console.log(`💰 Caja ${cashBox.name} cerrada sin saldo pendiente`);
+			}
 		} else if (status === 'empty') {
 			cashBox.openedAt = null as string | null;
 			cashBox.closedAt = null as string | null;
@@ -631,12 +613,37 @@ export const mockPendingBalances: PendingBalance[] = [
 	{
 		id: 'pending-1',
 		cashBoxId: '3', // Caja 30 Septiembre
-		amount: 288.00, // ← Saldo correcto de 288 soles
+		amount: 430.50, // ← Saldo correcto de 430.50 soles
 		date: '2025-09-30', // ← Fecha correcta
 		status: 'pending',
-		notes: 'Saldo pendiente de caja cerrada el 30/09'
+		notes: 'Saldo pendiente de caja cerrada el 30/09 (150 inicial + 280.5 operaciones)'
 	}
 ];
+
+// Función para simular el cierre de una caja con cálculo dinámico
+export function simulateCashBoxClosure(cashBoxId: string): void {
+	const cashBox = mockCashBoxes.find(cb => cb.id === cashBoxId);
+	if (!cashBox) return;
+
+	// Calcular el saldo actual basado en las operaciones
+	const currentBalance = computeCurrentAmount(cashBoxId);
+	
+	// Actualizar el estado de la caja
+	cashBox.status = 'closed';
+	cashBox.closedAt = new Date().toISOString();
+	cashBox.updatedAt = new Date().toISOString();
+
+	// Calcular saldo pendiente dinámicamente
+	if (currentBalance > 0) {
+		cashBox.pendingBalance = currentBalance;
+		cashBox.pendingBalanceHandled = false;
+		console.log(`💰 Caja ${cashBox.name} cerrada con saldo pendiente: ${currentBalance} soles`);
+	} else {
+		cashBox.pendingBalance = 0;
+		cashBox.pendingBalanceHandled = true;
+		console.log(`💰 Caja ${cashBox.name} cerrada sin saldo pendiente`);
+	}
+}
 
 // Función de debug para verificar datos
 export function debugPendingBalanceData() {
@@ -652,29 +659,45 @@ export function debugPendingBalanceData() {
 
 // Función para buscar la última caja anterior con saldo pendiente
 export function findLastPendingBalance(currentDate: string): PendingBalance | null {
-	// 1. Obtener todas las cajas cerradas con saldo pendiente
-	const closedBoxesWithPending = mockCashBoxes.filter(cb => 
+	// 1. Obtener todas las cajas cerradas que no han sido manejadas
+	const closedBoxes = mockCashBoxes.filter(cb => 
 		cb.status === 'closed' && 
-		cb.pendingBalance > 0 &&
 		cb.pendingBalanceHandled === false &&
 		cb.businessDate && 
 		cb.businessDate < currentDate // ← CLAVE: Solo anteriores
 	);
 	
 	// 2. Ordenar por fecha descendente (más reciente primero)
-	const sortedByDate = closedBoxesWithPending.sort((a, b) => 
+	const sortedByDate = closedBoxes.sort((a, b) => 
 		new Date(b.businessDate!).getTime() - new Date(a.businessDate!).getTime()
 	);
 	
-	// 3. Retornar la más reciente (última caja anterior con saldo pendiente)
-	const lastBox = sortedByDate[0];
-	if (!lastBox) return null;
+	// 3. Buscar la primera caja que tenga saldo pendiente
+	for (const cashBox of sortedByDate) {
+		// El saldo pendiente ya se calculó al cerrar la caja
+		if (cashBox.pendingBalance > 0) {
+			// Crear o actualizar el saldo pendiente
+			const existingPending = mockPendingBalances.find(pb => pb.cashBoxId === cashBox.id);
+			if (existingPending) {
+				existingPending.amount = cashBox.pendingBalance;
+			} else {
+				mockPendingBalances.push({
+					id: `pending-${cashBox.id}`,
+					cashBoxId: cashBox.id,
+					amount: cashBox.pendingBalance,
+					date: cashBox.businessDate!,
+					status: 'pending',
+					notes: `Saldo pendiente de caja cerrada el ${cashBox.businessDate}`
+				});
+			}
+			
+			console.log(`🔍 Encontrado saldo pendiente: ${cashBox.pendingBalance} soles de ${cashBox.name}`);
+			return mockPendingBalances.find(pb => pb.cashBoxId === cashBox.id) || null;
+		}
+	}
 	
-	// 4. Buscar el saldo pendiente correspondiente
-	return mockPendingBalances.find(pb => 
-		pb.cashBoxId === lastBox.id && 
-		pb.status === 'pending'
-	) || null;
+	console.log(`🔍 No se encontraron saldos pendientes para la fecha ${currentDate}`);
+	return null;
 }
 
 // Función para validar que el saldo sea de una fecha anterior
@@ -816,5 +839,17 @@ export function addOpeningOperationsToAllBoxes() {
 	
 }
 
+// Función para inicializar el estado dinámico de las cajas
+export function initializeDynamicCashBoxes() {
+	// Simular el cierre de la caja del 30 de septiembre con saldo pendiente
+	simulateCashBoxClosure('3'); // Caja 30 Septiembre
+	
+	console.log('🚀 Estado dinámico inicializado:');
+	console.log('📊 Caja 30 Septiembre - Saldo pendiente:', mockCashBoxes.find(cb => cb.id === '3')?.pendingBalance);
+}
+
 // Agregar operaciones de apertura a todas las cajas al cargar
 addOpeningOperationsToAllBoxes();
+
+// Inicializar el estado dinámico
+initializeDynamicCashBoxes();

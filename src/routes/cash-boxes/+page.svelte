@@ -18,7 +18,8 @@
 		markPendingBalanceAsHandled, 
 		transferPendingBalanceToCurrentBox,
 		debugPendingBalanceData,
-		mockCashBoxes
+		mockCashBoxes,
+		initializeDynamicCashBoxes
 	} from '$lib/db/mock-data';
 
 	let { data } = $props<{ data: PageData }>();
@@ -80,9 +81,8 @@
 		const cashBox = cashBoxes.find(cb => cb.id === cashBoxId);
 		if (!cashBox) return 0;
 		
-		// Obtener TODAS las operaciones de la caja, no solo las renderizadas
-		const allOperations = await getAllOperationsForCashBox(cashBoxId, currentDate);
-		const operationsForBox = allOperations.filter(op => op.cashBoxId === cashBoxId);
+		// Usar las operaciones ya cargadas en el estado
+		const operationsForBox = operations.filter(op => op.cashBoxId === cashBoxId);
 		const total = operationsForBox.reduce((acc, op) => {
 			return acc + (op.type === 'income' ? op.amount : -op.amount);
 		}, 0);
@@ -151,22 +151,18 @@
 			
 			if (response.ok) {
 				const data = await response.json();
-				operations = data;
-				// Forzar reactividad actualizando el array derivado
-				operationsArray = data.operations || [];
+				operations = Array.isArray(data) ? data : (data.operations || []);
 				console.log('🔄 OPERACIONES CARGADAS:', {
-					total: data.operations?.length || 0,
-					operations: data.operations?.map((op: any) => ({ id: op.id, description: op.description, amount: op.amount }))
+					total: operations.length,
+					operations: operations.map((op: any) => ({ id: op.id, description: op.description, amount: op.amount }))
 				});
 			} else {
 				console.error('❌ Error loading operations:', response.statusText);
 				operations = [];
-				operationsArray = [];
 			}
 		} catch (error) {
 			console.error('💥 Error loading operations:', error);
 			operations = [];
-			operationsArray = [];
 		} finally {
 			if (showLoading) isLoading = false;
 		}
@@ -414,6 +410,9 @@
 	onMount(async () => {
 		
 		try {
+			// Inicializar el estado dinámico de las cajas
+			initializeDynamicCashBoxes();
+			
 			// Cargar datos secuencialmente para debug
 			await loadCashBoxes();
 			
@@ -436,8 +435,7 @@
 	// Obtener caja para la fecha actual
 	let cashBoxForDate = $derived(getCashBoxForDate(currentDate));
 	
-	// Obtener array de operaciones (manejar tanto array directo como objeto con operations)
-	let operationsArray = $derived(Array.isArray(operations) ? operations : (operations as any)?.operations || []);
+	// operations ya es un Operation[] directamente
 	
 	// Variable para el monto actual de la caja
 	let currentAmount = $state(0);
@@ -455,70 +453,78 @@
 		await updateCurrentAmount();
 	}
 
+	// Función para transferir saldo pendiente creando operación real
+	async function transferPendingBalanceWithOperation(pendingBalanceId: string, currentCashBoxId: string) {
+		try {
+			// Obtener el saldo pendiente
+			const pendingBalance = findLastPendingBalance(toPeruDateString(currentDate));
+			if (!pendingBalance) {
+				throw new Error('Saldo pendiente no encontrado');
+			}
+
+			// Crear operación de transferencia en el backend
+			const transferOperation = {
+				type: 'income' as const,
+				amount: pendingBalance.amount,
+				description: `Transferencia de saldo pendiente desde caja ${pendingBalance.cashBoxId}`,
+				cashBoxId: currentCashBoxId,
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString()
+			};
+
+			console.log('💰 Creating transfer operation:', transferOperation);
+
+			const response = await fetch('/api/operations', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(transferOperation)
+			});
+
+			if (!response.ok) {
+				throw new Error('Error al crear operación de transferencia');
+			}
+
+			// Marcar el saldo pendiente como manejado
+			markPendingBalanceAsHandled(pendingBalanceId, 'transferred', 'Saldo transferido a caja actual');
+
+			console.log('✅ Transfer operation created successfully');
+		} catch (error) {
+			console.error('❌ Error transferring pending balance:', error);
+			throw error;
+		}
+	}
+
 	// Función para manejar la confirmación del saldo pendiente
 	async function handlePendingBalanceConfirm(event: any) {
 		const { action, notes, pendingBalanceId } = event;
 		
 		try {
+			const preservedCashBoxId = selectedCashBoxId;
+
 			if (action === 'transfer') {
-				// Preservar selectedCashBoxId antes de la transferencia
-				const preservedCashBoxId = selectedCashBoxId;
-				transferPendingBalanceToCurrentBox(pendingBalanceId, preservedCashBoxId);
-				
-				// Recargar datos para reflejar cambios
-				await loadCashBoxes();
-				await loadOperationsForDate(currentDate); // Recargar operaciones
-				await updateCurrentAmount();
-				
-				// Forzar reactividad explícitamente
-				operations = {...operations};
-				
-				console.log('🔄 AFTER TRANSFER - operationsArray:', operationsArray.length);
-				console.log('🔄 AFTER TRANSFER - currentAmount:', currentAmount);
-				
-				// Restaurar selectedCashBoxId después de la recarga
-				selectedCashBoxId = preservedCashBoxId;				
-				
-				const updatedCashBox = cashBoxes.find(cb => cb.id === selectedCashBoxId);
-				
-				// Abrir la caja con el saldo transferido
-				await openCashBoxDirectly();
-			} else if (action === 'return') {
-				// Preservar selectedCashBoxId antes de la acción
-				const preservedCashBoxId = selectedCashBoxId;
-				// Devolver a tesorería
-				markPendingBalanceAsHandled(pendingBalanceId, 'returned', notes);
-				// Recargar datos para reflejar cambios
-				await loadCashBoxes();
-				await loadOperationsForDate(currentDate); // Recargar operaciones
-				await updateCurrentAmount();
-				// Forzar reactividad explícitamente
-				operations = {...operations};
-				// Restaurar selectedCashBoxId después de la recarga
+				// Primero abrir la caja, luego crear la operación
 				selectedCashBoxId = preservedCashBoxId;
-				// Abrir la caja normalmente
+				await openCashBoxDirectly();
+				
+				// Ahora crear la operación de transferencia
+				await transferPendingBalanceWithOperation(pendingBalanceId, preservedCashBoxId);
+			} else if (action === 'return') {
+				markPendingBalanceAsHandled(pendingBalanceId, 'returned', notes);
+				selectedCashBoxId = preservedCashBoxId;
 				await openCashBoxDirectly();
 			} else if (action === 'handle') {
-				// Preservar selectedCashBoxId antes de la acción
-				const preservedCashBoxId = selectedCashBoxId;
-				// Marcar como manejado externamente
 				markPendingBalanceAsHandled(pendingBalanceId, 'handled', notes);
-				// Recargar datos para reflejar cambios
-				await loadCashBoxes();
-				await loadOperationsForDate(currentDate); // Recargar operaciones
-				await updateCurrentAmount();
-				// Forzar reactividad explícitamente
-				operations = {...operations};
-				// Restaurar selectedCashBoxId después de la recarga
 				selectedCashBoxId = preservedCashBoxId;
-				// Abrir la caja normalmente
 				await openCashBoxDirectly();
 			}
-			
-			// Cerrar modal de saldo pendiente
+
+			// 🔄 Recargar datos — esto ya dispara la reactividad
+			await loadCashBoxes();
+			await loadOperationsForDate(currentDate);
+			await updateCurrentAmount();
+
 			showPendingBalanceModal = false;
 			pendingBalance = null;
-			// No limpiar selectedCashBoxId aquí, se limpiará en openCashBoxDirectly
 		} catch (error) {
 			console.error('Error handling pending balance:', error);
 			errorMessage = 'Error al procesar el saldo pendiente';
@@ -619,7 +625,7 @@
 
 				<!-- Tabla de operaciones -->
 				<OperationsTable
-					operations={operationsArray}
+					operations={operations}
 					{rowsPerPage}
 					onRowsPerPageChange={handleRowsPerPageChange}
 					onAddOperation={() => showOperationsModal = true}
