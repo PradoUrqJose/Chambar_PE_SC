@@ -117,8 +117,10 @@
 	}
 
 	function handleDelete(item: any) {
+		console.log('🗑️ handleDelete called with item:', item);
 		itemToDelete = item;
 		showDeleteModal = true;
+		console.log('📋 Modal state set - showDeleteModal:', showDeleteModal, 'itemToDelete:', itemToDelete);
 	}
 
 	// Función para actualizar elemento
@@ -213,26 +215,39 @@
 
 	// Función para eliminar elemento
 	async function confirmDelete() {
-		if (!itemToDelete) return;
+		console.log('🔍 confirmDelete called, itemToDelete:', itemToDelete);
+		
+		if (!itemToDelete) {
+			console.log('❌ No item to delete, returning');
+			return;
+		}
 
 		try {
 			const endpoint = getCurrentEndpoint();
+			console.log('🌐 Deleting from endpoint:', endpoint);
+			
 			const response = await fetch(`${endpoint}/${itemToDelete.id}`, {
 				method: 'DELETE'
 			});
 
+			console.log('📡 Delete response status:', response.status);
+
 			if (response.ok) {
 				successMessage = 'Elemento eliminado correctamente';
 				await loadCurrentCatalog();
+				console.log('✅ Item deleted successfully');
 			} else {
 				const errorData = await response.json();
 				errorMessage = errorData.error || 'Error al eliminar el elemento';
+				console.log('❌ Delete error:', errorData);
 			}
 		} catch (error) {
 			errorMessage = 'Error de red al eliminar el elemento';
+			console.error('❌ Delete network error:', error);
 		} finally {
 			showDeleteModal = false;
 			itemToDelete = null;
+			console.log('🧹 Modal closed and itemToDelete cleared');
 		}
 	}
 
