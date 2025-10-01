@@ -187,10 +187,12 @@ export async function updateOperation(
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Si no hay base de datos (desarrollo local), usar mock data
 	if (!db) {
-		console.log('Modo desarrollo: simulando actualización de operación');
-		return { success: true };
+		console.log('Modo desarrollo: actualizando operación en mock data');
+		const { updateMockOperation } = await import('$lib/db/mock-data');
+		const success = updateMockOperation(id, data);
+		return { success };
 	}
 	
 	// Construir query dinámicamente

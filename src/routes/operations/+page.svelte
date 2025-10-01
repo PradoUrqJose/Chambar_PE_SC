@@ -164,16 +164,24 @@
 		try {
 			if (selectedOperation) {
 				// Modo edición
+				console.log('✏️ EDITANDO OPERACIÓN - ID:', selectedOperation.id);
+				console.log('✏️ EDITANDO OPERACIÓN - Data:', operationData);
+				
 				const response = await fetch(`/api/operations?id=${selectedOperation.id}`, {
 					method: 'PUT',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify(operationData)
 				});
 
+				console.log('✏️ EDITANDO OPERACIÓN - Response status:', response.status);
+				
 				if (response.ok) {
+					const result = await response.json();
+					console.log('✏️ EDITANDO OPERACIÓN - Response data:', result);
 					successMessage = 'Operación actualizada exitosamente';
 				} else {
 					const errorData = await response.json();
+					console.error('✏️ EDITANDO OPERACIÓN - Error:', errorData);
 					errorMessage = errorData.error || 'Error al actualizar la operación';
 					return;
 				}

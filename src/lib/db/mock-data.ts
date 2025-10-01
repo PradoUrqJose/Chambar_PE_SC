@@ -216,11 +216,22 @@ export function addMockOperation(operation: {
 
 // Función para actualizar operación mock
 export function updateMockOperation(operationId: string, updateData: Partial<typeof mockOperations[0]>): boolean {
+	console.log('🔧 updateMockOperation - ID:', operationId);
+	console.log('🔧 updateMockOperation - Update data:', updateData);
+	console.log('🔧 updateMockOperation - Mock operations before:', mockOperations.length);
+	
 	const index = mockOperations.findIndex(op => op.id === operationId);
+	console.log('🔧 updateMockOperation - Found index:', index);
+	
 	if (index !== -1) {
+		const oldOperation = { ...mockOperations[index] };
 		mockOperations[index] = { ...mockOperations[index], ...updateData };
+		console.log('🔧 updateMockOperation - Old operation:', oldOperation);
+		console.log('🔧 updateMockOperation - New operation:', mockOperations[index]);
 		return true;
 	}
+	
+	console.log('🔧 updateMockOperation - Operation not found!');
 	return false;
 }
 
