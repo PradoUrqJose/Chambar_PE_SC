@@ -9,3 +9,4 @@ export { default as AttachmentsPreview } from './AttachmentsPreview.svelte';
 export { default as LazyImage } from './LazyImage.svelte';
 export { default as AttachmentDebugPanel } from './AttachmentDebugPanel.svelte';
 export { default as Pagination } from './Pagination.svelte';
+export { default as ConfirmationModal } from './ConfirmationModal.svelte';

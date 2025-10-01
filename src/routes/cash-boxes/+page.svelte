@@ -7,7 +7,8 @@
 		OperationModal, 
 		DateNavigation, 
 		CashBoxActions,
-		ReopenConfirmationModal 
+		ReopenConfirmationModal,
+		ConfirmationModal
 	} from '$lib/components';
 	import PendingBalanceModal from '$lib/components/PendingBalanceModal.svelte';
 	import type { CashBox } from '$lib/services/cash-boxes-service';
@@ -39,6 +40,13 @@
 	let reopenNote = $state('');
 	let showPendingBalanceModal = $state(false);
 	let pendingBalance = $state<any>(null);
+	
+	// Estados para CRUD de operaciones
+	let showEditModal = $state(false);
+	let showDeleteModal = $state(false);
+	let selectedOperation = $state<Operation | null>(null);
+	let operationToDelete = $state<Operation | null>(null);
+	let successMessage = $state('');
 	
 	// Estados para tabla
 	let rowsPerPage = $state(5);
@@ -518,6 +526,56 @@
 		// No necesitamos recargar datos, solo cambiar la vista
 	}
 
+	// Funciones CRUD para operaciones
+	function handleEditOperation(operation: Operation) {
+		selectedOperation = operation;
+		showEditModal = true;
+	}
+
+	function handleDeleteOperation(operation: Operation) {
+		operationToDelete = operation;
+		showDeleteModal = true;
+	}
+
+	async function confirmDelete() {
+		if (!operationToDelete) return;
+
+		try {
+			const response = await fetch(`/api/operations/${operationToDelete.id}`, {
+				method: 'DELETE'
+			});
+
+			if (response.ok) {
+				successMessage = 'Operación eliminada exitosamente';
+				await loadOperationsForDate(currentDate, false);
+				await updateCurrentAmount();
+			} else {
+				const errorData = await response.json();
+				errorMessage = errorData.error || 'Error al eliminar la operación';
+			}
+		} catch (error) {
+			console.error('Error deleting operation:', error);
+			errorMessage = 'Error de red al eliminar la operación';
+		} finally {
+			showDeleteModal = false;
+			operationToDelete = null;
+		}
+	}
+
+	function handleOperationSuccess() {
+		successMessage = 'Operación guardada exitosamente';
+		showOperationsModal = false;
+		showEditModal = false;
+		selectedOperation = null;
+		loadOperationsForDate(currentDate, false);
+		updateCurrentAmount();
+	}
+
+	function clearMessages() {
+		errorMessage = '';
+		successMessage = '';
+	}
+
 	// Inicialización
 	onMount(async () => {
 		
@@ -725,7 +783,7 @@ function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance
 			</div>
 		</div>
 
-		<!-- Mensaje de error -->
+		<!-- Mensajes de feedback -->
 		{#if errorMessage}
 			<div class="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
 				<div class="flex">
@@ -733,6 +791,26 @@ function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 					</svg>
 					<span class="text-sm text-red-700">{errorMessage}</span>
+					<button onclick={clearMessages} class="ml-auto text-red-400 hover:text-red-600" aria-label="Cerrar mensaje de error">
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				</div>
+			</div>
+		{/if}
+		{#if successMessage}
+			<div class="mb-6 bg-green-50 border border-green-200 rounded-md p-4">
+				<div class="flex">
+					<svg class="w-5 h-5 text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+					</svg>
+					<span class="text-sm text-green-700">{successMessage}</span>
+					<button onclick={clearMessages} class="ml-auto text-green-400 hover:text-green-600" aria-label="Cerrar mensaje de éxito">
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
 				</div>
 			</div>
 		{/if}
@@ -777,6 +855,9 @@ function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance
 					{currentPage}
 					onPageChange={handlePageChange}
 					showPagination={true}
+					onEditOperation={handleEditOperation}
+					onDeleteOperation={handleDeleteOperation}
+					showActions={true}
 				/>
 			</div>
 		{/if}
@@ -858,4 +939,38 @@ function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance
 		onClose={handlePendingBalanceClose}
 		onConfirm={handlePendingBalanceConfirm}
 	/>
+
+	<!-- Modal de edición de operación -->
+	{#if showEditModal && selectedOperation}
+		<OperationModal
+			isOpen={showEditModal}
+			onClose={() => {
+				showEditModal = false;
+				selectedOperation = null;
+			}}
+			onSubmit={handleOperationSuccess}
+			operation={selectedOperation}
+			operationDetails={operationDetails}
+			responsiblePersons={responsiblePersons}
+			stands={stands}
+			companies={companies}
+			platform={undefined}
+		/>
+	{/if}
+
+	<!-- Modal de confirmación de eliminación -->
+	{#if showDeleteModal && operationToDelete}
+		<ConfirmationModal
+			isOpen={showDeleteModal}
+			title="Confirmar Eliminación"
+			message="¿Estás seguro de que quieres eliminar esta operación? Esta acción no se puede deshacer."
+			confirmText="Eliminar"
+			cancelText="Cancelar"
+			onConfirm={confirmDelete}
+			onCancel={() => {
+				showDeleteModal = false;
+				operationToDelete = null;
+			}}
+		/>
+	{/if}
 </div>

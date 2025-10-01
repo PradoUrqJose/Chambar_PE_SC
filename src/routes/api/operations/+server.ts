@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { getOperations, createOperation } from '$lib/services/operations-service';
+import { getOperations, createOperation, updateOperation } from '$lib/services/operations-service';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ platform, url }) => {
@@ -44,5 +44,33 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	} catch (error) {
 		console.error('Error creating operation:', error);
 		return json({ error: 'Error al crear la operación' }, { status: 500 });
+	}
+};
+
+export const PUT: RequestHandler = async ({ request, platform, url }) => {
+	try {
+		const operationId = url.searchParams.get('id');
+		if (!operationId) {
+			return json({ error: 'ID de operación requerido' }, { status: 400 });
+		}
+
+		const data = await request.json();
+		
+		// Actualizar timestamp
+		const operationData = {
+			...data,
+			updatedAt: new Date().toISOString()
+		};
+		
+		const result = await updateOperation(platform, operationId, operationData);
+		
+		if (result.success) {
+			return json({ message: 'Operación actualizada correctamente' });
+		} else {
+			return json({ error: result.error || 'Error al actualizar la operación' }, { status: 500 });
+		}
+	} catch (error) {
+		console.error('Error updating operation:', error);
+		return json({ error: 'Error al actualizar la operación' }, { status: 500 });
 	}
 };

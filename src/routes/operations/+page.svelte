@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { OperationsTable } from '$lib/components';
+	import { OperationsTable, OperationModal, ConfirmationModal } from '$lib/components';
 	import type { Operation } from '$lib/services/operations-service';
 
 	// Estado principal
@@ -9,6 +9,19 @@
 	let allOperations = $state<Operation[]>([]); // Operaciones sin filtrar
 	let cashBoxes = $state<any[]>([]);
 	let errorMessage = $state('');
+	let successMessage = $state('');
+
+	// Estado de modales
+	let showOperationModal = $state(false);
+	let showDeleteModal = $state(false);
+	let selectedOperation = $state<Operation | null>(null);
+	let operationToDelete = $state<Operation | null>(null);
+
+	// Datos para los catálogos
+	let operationDetails = $state<any[]>([]);
+	let responsiblePersons = $state<any[]>([]);
+	let stands = $state<any[]>([]);
+	let companies = $state<any[]>([]);
 
 	// Paginación
 	let currentPage = $state(1);
@@ -61,6 +74,37 @@
 		}
 	}
 
+	// Cargar datos de los catálogos
+	async function loadCatalogData() {
+		try {
+			// Cargar detalles de operación
+			const detailsResponse = await fetch('/api/catalogs/operation-details');
+			if (detailsResponse.ok) {
+				operationDetails = await detailsResponse.json();
+			}
+
+			// Cargar personas responsables
+			const personsResponse = await fetch('/api/catalogs/responsible-persons');
+			if (personsResponse.ok) {
+				responsiblePersons = await personsResponse.json();
+			}
+
+			// Cargar stands
+			const standsResponse = await fetch('/api/catalogs/stands');
+			if (standsResponse.ok) {
+				stands = await standsResponse.json();
+			}
+
+			// Cargar empresas
+			const companiesResponse = await fetch('/api/catalogs/companies');
+			if (companiesResponse.ok) {
+				companies = await companiesResponse.json();
+			}
+		} catch (error) {
+			console.error('Error loading catalog data:', error);
+		}
+	}
+
 	// Manejar cambio de filas por página
 	function handleRowsPerPageChange(value: number) {
 		rowsPerPage = value;
@@ -75,6 +119,59 @@
 	// Función dummy para onAddOperation (no se usará)
 	function handleAddOperation() {
 		// No implementado - esta tabla es solo de visualización
+	}
+
+	// Manejar edición de operación
+	function handleEditOperation(operation: Operation) {
+		selectedOperation = operation;
+		showOperationModal = true;
+	}
+
+	// Manejar eliminación de operación
+	function handleDeleteOperation(operation: Operation) {
+		operationToDelete = operation;
+		showDeleteModal = true;
+	}
+
+	// Confirmar eliminación
+	async function confirmDelete() {
+		if (!operationToDelete) return;
+
+		try {
+			const response = await fetch(`/api/operations/${operationToDelete.id}`, {
+				method: 'DELETE'
+			});
+
+			if (response.ok) {
+				successMessage = 'Operación eliminada exitosamente';
+				await loadOperations(); // Recargar operaciones
+				applyFilters(); // Reaplicar filtros
+			} else {
+				const errorData = await response.json();
+				errorMessage = errorData.error || 'Error al eliminar la operación';
+			}
+		} catch (error) {
+			console.error('Error deleting operation:', error);
+			errorMessage = 'Error de red al eliminar la operación';
+		} finally {
+			showDeleteModal = false;
+			operationToDelete = null;
+		}
+	}
+
+	// Manejar éxito de operación (crear/editar)
+	function handleOperationSuccess() {
+		successMessage = 'Operación guardada exitosamente';
+		showOperationModal = false;
+		selectedOperation = null;
+		loadOperations(); // Recargar operaciones
+		applyFilters(); // Reaplicar filtros
+	}
+
+	// Limpiar mensajes
+	function clearMessages() {
+		errorMessage = '';
+		successMessage = '';
 	}
 
 	// Aplicar filtros
@@ -171,6 +268,7 @@
 	onMount(() => {
 		loadOperations();
 		loadCashBoxes();
+		loadCatalogData();
 	});
 </script>
 
@@ -183,7 +281,7 @@
 	<div class="max-w-7xl mx-auto">
 		<h1 class="text-3xl font-bold text-gray-900 mb-6">Gestión de Operaciones</h1>
 
-		<!-- Mensaje de error -->
+		<!-- Mensajes de feedback -->
 		{#if errorMessage}
 			<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
 				<div class="flex items-center">
@@ -193,6 +291,28 @@
 					<div class="ml-3">
 						<p class="text-sm font-medium text-red-800">{errorMessage}</p>
 					</div>
+					<button onclick={clearMessages} class="ml-auto text-red-400 hover:text-red-600" aria-label="Cerrar mensaje de error">
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				</div>
+			</div>
+		{/if}
+		{#if successMessage}
+			<div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
+				<div class="flex items-center">
+					<svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+					</svg>
+					<div class="ml-3">
+						<p class="text-sm font-medium text-green-800">{successMessage}</p>
+					</div>
+					<button onclick={clearMessages} class="ml-auto text-green-400 hover:text-green-600" aria-label="Cerrar mensaje de éxito">
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
 				</div>
 			</div>
 		{/if}
@@ -392,7 +512,44 @@
 				defaultRowsPerPage={20}
 				showCashBoxInfo={true}
 				{cashBoxes}
+				onEditOperation={handleEditOperation}
+				onDeleteOperation={handleDeleteOperation}
+				showActions={true}
 			/>
 		{/if}
 	</div>
 </div>
+
+<!-- Modal de edición de operación -->
+{#if showOperationModal && selectedOperation}
+	<OperationModal
+		isOpen={showOperationModal}
+		onClose={() => {
+			showOperationModal = false;
+			selectedOperation = null;
+		}}
+		onSubmit={handleOperationSuccess}
+		operation={selectedOperation}
+		operationDetails={operationDetails}
+		responsiblePersons={responsiblePersons}
+		stands={stands}
+		companies={companies}
+		platform={undefined}
+	/>
+{/if}
+
+<!-- Modal de confirmación de eliminación -->
+{#if showDeleteModal && operationToDelete}
+	<ConfirmationModal
+		isOpen={showDeleteModal}
+		title="Confirmar Eliminación"
+		message="¿Estás seguro de que quieres eliminar esta operación? Esta acción no se puede deshacer."
+		confirmText="Eliminar"
+		cancelText="Cancelar"
+		onConfirm={confirmDelete}
+		onCancel={() => {
+			showDeleteModal = false;
+			operationToDelete = null;
+		}}
+	/>
+{/if}

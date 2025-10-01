@@ -11,6 +11,9 @@
 		stands: any[];
 		companies: any[];
 		enableCompression?: boolean;
+		operation?: Operation | null;
+		cashBoxId?: string;
+		platform?: any;
 	}
 
 	let { 
@@ -21,7 +24,10 @@
 		responsiblePersons, 
 		stands, 
 		companies,
-		enableCompression = true
+		enableCompression = true,
+		operation = null,
+		cashBoxId = '',
+		platform = undefined
 	}: Props = $props();
 
 	// Estado del formulario
