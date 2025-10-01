@@ -1,5 +1,5 @@
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockOperations, addMockOperation, updateMockCashBoxAmount, mockCashBoxes } from '$lib/db/mock-data';
+import { mockOperations, addMockOperation, mockCashBoxes } from '$lib/db/mock-data';
 
 export interface Operation {
 	id: string;
@@ -75,25 +75,27 @@ export async function createOperation(
 	
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
-		console.log('Modo desarrollo: creando operación para caja:', data.cashBoxId);
+		console.log('💰 Modo desarrollo: creando operación para caja:', data.cashBoxId);
 		
 		// Validar que la caja existe
 		const cashBox = mockCashBoxes.find(cb => cb.id === data.cashBoxId);
 		if (!cashBox) {
+			console.error('❌ Caja no encontrada:', data.cashBoxId);
 			return { success: false, error: 'Caja no encontrada' };
 		}
 		
 		// Validar que la caja está abierta o reabierta
 		if (cashBox.status !== 'open' && cashBox.status !== 'reopened') {
+			console.error('❌ La caja no está abierta. Estado actual:', cashBox.status);
 			return { success: false, error: 'La caja no está abierta' };
 		}
 		
 		const newOperation = addMockOperation(data, data.createdAt, data.updatedAt);
 		
-		// Actualizar monto de caja en modo desarrollo
-		await updateMockCashBoxAmount(data.cashBoxId, data.amount, data.type);
+		// No necesitamos actualizar el monto de la caja manualmente
+		// El currentAmount se calcula dinámicamente en el frontend usando computeCurrentAmount
 		
-		console.log('Operación creada exitosamente:', newOperation.id);
+		console.log('✅ Operación creada exitosamente:', newOperation.id);
 		return { success: true, id: newOperation.id };
 	}
 	
