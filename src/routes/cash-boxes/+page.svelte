@@ -577,18 +577,51 @@
 		}
 
 		try {
+			console.log('🎯 handlePendingBalanceConfirm - action:', action);
+			console.log('🎯 handlePendingBalanceConfirm - cashBoxForDate.id:', cashBoxForDate.id);
+			
+			// Si la caja es temporal, primero crearla en el backend
+			let actualCashBoxId = cashBoxForDate.id;
+			if (cashBoxForDate.id.startsWith('temp-')) {
+				console.log('📦 Creando caja en backend antes de transferir...');
+				const targetDate = toPeruDateString(currentDate);
+				const createResponse = await fetch('/api/cash-boxes', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ 
+						name: `Caja ${targetDate}`,
+						businessDate: targetDate
+					})
+				});
+				
+				if (!createResponse.ok) {
+					errorMessage = 'Error al crear la caja';
+					return;
+				}
+				
+				const newCashBox = await createResponse.json();
+				actualCashBoxId = newCashBox.id;
+				console.log('✅ Caja creada con ID:', actualCashBoxId);
+				
+				// Recargar cajas para tener la nueva
+				await loadCashBoxes();
+			}
+			
 			if (action === 'transfer') {
+				console.log('💸 Transfiriendo saldo pendiente a caja:', actualCashBoxId);
+				
 				// Transferir saldo pendiente a la caja actual
-				transferPendingBalanceToCurrentBox(pendingBalanceId, cashBoxForDate.id);
+				transferPendingBalanceToCurrentBox(pendingBalanceId, actualCashBoxId);
+				console.log('✅ Transferencia completada');
 				
 				// Abrir la caja
-				await openCashBoxDirectly(cashBoxForDate.id);
+				await openCashBoxDirectly(actualCashBoxId);
 			} else if (action === 'return') {
 				markPendingBalanceAsHandled(pendingBalanceId, 'returned', notes);
-				await openCashBoxDirectly(cashBoxForDate.id);
+				await openCashBoxDirectly(actualCashBoxId);
 			} else if (action === 'handle') {
 				markPendingBalanceAsHandled(pendingBalanceId, 'handled', notes);
-				await openCashBoxDirectly(cashBoxForDate.id);
+				await openCashBoxDirectly(actualCashBoxId);
 			}
 
 			// 🔄 Recargar datos — esto ya dispara la reactividad
@@ -599,7 +632,7 @@
 			showPendingBalanceModal = false;
 			pendingBalance = null;
 		} catch (error) {
-			console.error('Error handling pending balance:', error);
+			console.error('💥 Error handling pending balance:', error);
 			errorMessage = 'Error al procesar el saldo pendiente';
 		}
 	}
