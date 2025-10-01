@@ -12,13 +12,10 @@
 	import PendingBalanceModal from '$lib/components/PendingBalanceModal.svelte';
 	import type { CashBox } from '$lib/services/cash-boxes-service';
 	import type { Operation } from '$lib/services/operations-service';
-	import { 
-		findLastPendingBalance, 
-		validatePendingBalance, 
-		markPendingBalanceAsHandled, 
-		transferPendingBalanceToCurrentBox,
-		debugPendingBalanceData
-	} from '$lib/db/mock-data';
+import {
+	getPendingBalance,
+	handlePendingBalanceAction
+} from '$lib/services/cash-boxes-service';
 
 	let { data } = $props<{ data: PageData }>();
 	
@@ -303,14 +300,19 @@
 				const latestClosedBox = sortedBoxes[0];
 				console.log('🧮 Caja cerrada más reciente:', latestClosedBox);
 				
-				const pending = findLastPendingBalance(currentDateStr);
-				if (pending) {
-					console.log('✅ Saldo pendiente detectado desde store:', pending);
-					pendingBalance = pending;
-					showPendingBalanceModal = true;
-					console.log('⚠️ Mostrando modal de saldo pendiente');
-					return;
-				}
+		const pendingResponse = await fetch(`/api/cash-boxes/pending?date=${currentDateStr}`);
+		if (!pendingResponse.ok) {
+			console.error('❌ Error consultando saldo pendiente:', await pendingResponse.text());
+		} else {
+			const { pending } = await pendingResponse.json();
+			console.log('📊 Resultado getPendingBalance:', pending);
+			if (pending && pending.status === 'pending') {
+				pendingBalance = pending;
+				showPendingBalanceModal = true;
+				console.log('⚠️ Mostrando modal de saldo pendiente');
+				return;
+			}
+		}
 			}
 
 			// Si no hay saldo pendiente, continuar con apertura normal
@@ -560,7 +562,7 @@
 			
 			// Si la caja es temporal, primero crearla en el backend
 			let actualCashBoxId = cashBoxForDate.id;
-			if (cashBoxForDate.id.startsWith('temp-')) {
+	if (cashBoxForDate.id.startsWith('temp-')) {
 				console.log('📦 Creando caja en backend antes de transferir...');
 				const targetDate = toPeruDateString(currentDate);
 				const createResponse = await fetch('/api/cash-boxes', {
@@ -585,35 +587,35 @@
 				await loadCashBoxes();
 			}
 			
+		let actionResult: { success: boolean; error?: string } | undefined;
 			if (action === 'transfer') {
 				console.log('💸 Transfiriendo saldo pendiente a caja:', actualCashBoxId);
-				
-				// Transferir saldo pendiente a la caja actual
-				const transferResult = transferPendingBalanceToCurrentBox(pendingBalanceId, actualCashBoxId);
-				if (!transferResult?.success) {
-					console.error('❌ Error al transferir saldo pendiente:', transferResult?.error);
-					errorMessage = 'Error al transferir saldo pendiente';
-					return;
-				}
-				console.log('✅ Transferencia completada:', transferResult);
-				
-				// Abrir la caja
-				await openCashBoxDirectly(actualCashBoxId);
+			actionResult = await handlePendingBalanceAction(null as any, 'transfer', {
+					pendingBalanceId,
+					currentCashBoxId: actualCashBoxId,
+					notes
+				});
 			} else if (action === 'return') {
-				const result = markPendingBalanceAsHandled(pendingBalanceId, 'returned', notes);
-				if (!result.success) {
-					console.error('❌ Error al marcar saldo como devuelto:', result.error);
-					errorMessage = 'Error al manejar el saldo pendiente';
-					return;
-				}
-				await openCashBoxDirectly(actualCashBoxId);
+			actionResult = await handlePendingBalanceAction(null as any, 'return', {
+					pendingBalanceId,
+					notes
+				});
 			} else if (action === 'handle') {
-				const result = markPendingBalanceAsHandled(pendingBalanceId, 'handled', notes);
-				if (!result.success) {
-					console.error('❌ Error al marcar saldo como manejado:', result.error);
-					errorMessage = 'Error al manejar el saldo pendiente';
-					return;
-				}
+			actionResult = await handlePendingBalanceAction(null as any, 'handle', {
+					pendingBalanceId,
+					notes
+				});
+			}
+
+			if (!actionResult?.success) {
+				console.error('❌ Error al procesar saldo pendiente:', actionResult?.error);
+				errorMessage = actionResult?.error || 'Error al procesar el saldo pendiente';
+				return;
+			}
+
+			if (action === 'transfer') {
+				await openCashBoxDirectly(actualCashBoxId);
+			} else {
 				await openCashBoxDirectly(actualCashBoxId);
 			}
 

@@ -1,5 +1,12 @@
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockCashBoxes, updateMockCashBoxStatus, addMockCashBox } from '$lib/db/mock-data';
+import {
+	mockCashBoxes,
+	updateMockCashBoxStatus,
+	addMockCashBox,
+	findLastPendingBalance,
+	markPendingBalanceAsHandled,
+	transferPendingBalanceToCurrentBox
+} from '$lib/db/mock-data';
 
 // Enum unificado para estados de caja
 export type CashBoxStatus = 'empty' | 'open' | 'closed' | 'reopened';
@@ -20,6 +27,16 @@ export interface CashBox {
 export interface CreateCashBoxData {
 	name: string;
 	businessDate: string;
+}
+
+export interface PendingBalanceData {
+	id: string;
+	cashBoxId: string;
+	amount: number;
+	date: string;
+	status: 'pending' | 'transferred' | 'returned' | 'handled';
+	notes?: string;
+	handledAt?: string;
 }
 
 export async function getCashBoxes(platform: App.Platform): Promise<CashBox[]> {
@@ -71,6 +88,52 @@ export async function createCashBox(
 		'INSERT INTO cash_boxes (name, business_date) VALUES (?, ?)',
 		[data.name, data.businessDate]
 	);
+}
+
+export async function getPendingBalance(
+	platform: App.Platform,
+	currentDate: string
+): Promise<PendingBalanceData | null> {
+	const db = getD1Database(platform);
+
+	if (!db) {
+		const pending = findLastPendingBalance(currentDate);
+		return pending ? { ...pending } : null;
+	}
+
+	// TODO: Implementar consulta real a D1 cuando esté disponible
+	return null;
+}
+
+export async function handlePendingBalanceAction(
+	platform: App.Platform,
+	action: 'transfer' | 'return' | 'handle',
+	data: {
+		pendingBalanceId: string;
+		notes?: string;
+		currentCashBoxId?: string;
+	}
+): Promise<{ success: boolean; error?: string; amount?: number; originalCashBoxId?: string; currentCashBoxId?: string }> {
+	const db = getD1Database(platform);
+
+	if (!db) {
+		if (action === 'transfer') {
+			if (!data.currentCashBoxId) {
+				return { success: false, error: 'currentCashBoxId es requerido para transferir' };
+			}
+			return transferPendingBalanceToCurrentBox(data.pendingBalanceId, data.currentCashBoxId);
+		}
+
+		const result = markPendingBalanceAsHandled(
+			data.pendingBalanceId,
+			action === 'return' ? 'returned' : 'handled',
+			data.notes
+		);
+		return result.success ? { success: true } : { success: false, error: result.error };
+	}
+
+	// TODO: Implementar lógica real contra D1
+	return { success: false, error: 'Pending balance actions not implemented for D1 yet' };
 }
 
 export async function openCashBox(
