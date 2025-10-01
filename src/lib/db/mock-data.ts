@@ -303,13 +303,31 @@ export function markPendingBalanceAsHandled(pendingBalanceId: string, action: 't
 }
 
 export function transferPendingBalanceToCurrentBox(pendingBalanceId: string, currentCashBoxId: string) {	
+	console.log('🔄 transferPendingBalanceToCurrentBox - START');
+	console.log('   pendingBalanceId:', pendingBalanceId);
+	console.log('   currentCashBoxId:', currentCashBoxId);
+	
 	const pendingBalance = mockPendingBalances.find(pb => pb.id === pendingBalanceId);
-	if (!pendingBalance) return;
+	if (!pendingBalance) {
+		console.error('❌ Pending balance not found:', pendingBalanceId);
+		return;
+	}
+	console.log('✅ Pending balance found:', pendingBalance);
 
 	const originalCashBox = mockCashBoxes.find(cb => cb.id === pendingBalance.cashBoxId);
 	const currentCashBox = mockCashBoxes.find(cb => cb.id === currentCashBoxId);
 	
-	if (!originalCashBox || !currentCashBox) return;
+	if (!originalCashBox) {
+		console.error('❌ Original cash box not found:', pendingBalance.cashBoxId);
+		return;
+	}
+	if (!currentCashBox) {
+		console.error('❌ Current cash box not found:', currentCashBoxId);
+		return;
+	}
+	
+	console.log('✅ Original cash box:', originalCashBox);
+	console.log('✅ Current cash box:', currentCashBox);
 
 	// Marcar el saldo como transferido
 	pendingBalance.status = 'transferred';
@@ -351,13 +369,26 @@ export function transferPendingBalanceToCurrentBox(pendingBalanceId: string, cur
 	};
 	
 	// Agregar ambas operaciones
+	console.log('📝 Creando operación EGRESO:', transferOutOperation);
 	mockOperations.push(transferOutOperation);
+	
+	console.log('📝 Creando operación INGRESO:', transferInOperation);
 	mockOperations.push(transferInOperation);
+	
+	console.log('📊 Total operaciones en mockOperations:', mockOperations.length);
+	console.log('📊 Operaciones:', mockOperations.map(op => ({
+		id: op.id,
+		type: op.type,
+		amount: op.amount,
+		businessDate: op.businessDate,
+		cashBoxId: op.cashBoxId
+	})));
 	
 	// Actualizar el monto de apertura de la caja actual
 	currentCashBox.openingAmount += pendingBalance.amount;
 	
-	console.log(`💸 Transferencia bidireccional: ${pendingBalance.amount} soles de ${originalCashBox.name} → ${currentCashBox.name}`);
+	console.log(`✅ Transferencia bidireccional completada: ${pendingBalance.amount} soles de ${originalCashBox.name} → ${currentCashBox.name}`);
+	console.log('🔄 transferPendingBalanceToCurrentBox - END');
 }
 
 export function debugPendingBalanceData() {

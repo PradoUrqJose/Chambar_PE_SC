@@ -683,6 +683,7 @@
 		{/if}
 
 		<!-- Debug info -->
+		 <!-- 
 		<div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
 			<h4 class="font-semibold text-yellow-800">Debug Info:</h4>
 			<p class="text-sm text-yellow-700">isLoading: {isLoading}</p>
@@ -692,6 +693,7 @@
 			<p class="text-sm text-yellow-700">currentDate: {currentDate.toISOString()}</p>
 			<p class="text-sm text-yellow-700">targetDate: {toPeruDateString(currentDate)}</p>
 		</div>
+		-->
 		<!-- Loading state -->
 		{#if isLoading}
 			<div class="flex justify-center items-center py-12">
