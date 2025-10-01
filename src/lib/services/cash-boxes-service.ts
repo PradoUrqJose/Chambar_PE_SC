@@ -1,17 +1,19 @@
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
 import { mockCashBoxes, updateMockCashBoxStatus, addMockCashBox } from '$lib/db/mock-data';
 
+// Enum unificado para estados de caja
+export type CashBoxStatus = 'empty' | 'open' | 'closed' | 'reopened';
+
 export interface CashBox {
 	id: string;
 	name: string;
-	status: 'open' | 'closed';
-	estado: 'vacio' | 'cerrado' | 'abierto' | 'reaperturado';
+	status: CashBoxStatus; // Estado unificado
 	openingAmount: number;
-	currentAmount: number;
-	openedAt?: string;
-	originalOpenedAt?: string; // Fecha original de apertura (antes de reapertura)
-	closedAt?: string;
-	reopenedAt?: string;
+	openedAt?: string | null;
+	originalOpenedAt?: string | null; // Fecha original de apertura (antes de reapertura)
+	closedAt?: string | null;
+	reopenedAt?: string | null;
+	businessDate?: string | null; // Business date en zona horaria de Perú
 	createdAt: string;
 	updatedAt: string;
 }

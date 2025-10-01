@@ -1,71 +1,96 @@
 // Datos mock para desarrollo local cuando D1 no está disponible
+// Esquema robusto con business_date y estado unificado
 
-// Función para obtener fecha de ayer de forma consistente
-function getYesterday() {
-	const yesterday = new Date();
-	yesterday.setDate(yesterday.getDate() - 1);
-	yesterday.setHours(0, 0, 0, 0); // Inicio del día de ayer
-	return yesterday;
+import { toBusinessDate, toPeruISOString } from '$lib/utils/date-helpers';
+
+// Interfaz específica para cajas mock
+interface MockCashBox {
+	id: string;
+	name: string;
+	status: 'open' | 'closed' | 'reopened' | 'empty';
+	openingAmount: number;
+	openedAt: string | null;
+	originalOpenedAt: string | null;
+	closedAt: string | null;
+	reopenedAt: string | null;
+	businessDate: string | null;
+	createdAt: string;
+	updatedAt: string;
 }
 
-export const mockCashBoxes = [
+export const mockCashBoxes: MockCashBox[] = [
 	{
 		id: '1',
 		name: 'Caja Principal',
-		status: 'closed',
-		estado: 'vacio',
-		openingAmount: 0,
-		currentAmount: 0,
-		openedAt: null,
-		originalOpenedAt: null,
-		closedAt: null,
-		reopenedAt: null,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString()
+		status: 'open', // Estado unificado
+		openingAmount: 100.00,
+		openedAt: '2025-10-01T05:00:00.000Z', // 01-10-2025 00:00 Perú (hoy)
+		originalOpenedAt: '2025-10-01T05:00:00.000Z',
+		closedAt: null as string | null,
+		reopenedAt: null as string | null,
+		businessDate: '2025-10-01', // Business date en zona horaria de Perú
+		createdAt: '2025-10-01T05:00:00.000Z',
+		updatedAt: '2025-10-01T05:00:00.000Z'
 	},
 	{
 		id: '2',
-		name: 'Caja de Ayer',
-		status: 'closed',
-		estado: 'cerrado',
-		openingAmount: 100.00,
-		currentAmount: 100.00, // Balance final después de todas las operaciones
-		openedAt: '2025-09-30T00:00:00.000Z', // 30-09-2025 00:00
-		originalOpenedAt: '2025-09-30T00:00:00.000Z', // 30-09-2025 00:00
-		closedAt: '2025-09-30T08:00:00.000Z', // 30-09-2025 08:00
-		reopenedAt: null,
-		createdAt: '2025-09-30T00:00:00.000Z',
-		updatedAt: '2025-09-30T08:00:00.000Z'
+		name: 'Caja 27 Septiembre',
+		status: 'closed', // Estado unificado
+		openingAmount: 200.00,
+		openedAt: '2025-09-27T05:00:00.000Z', // 27-09-2025 00:00 Perú
+		originalOpenedAt: '2025-09-27T05:00:00.000Z', // 27-09-2025 00:00 Perú
+		closedAt: '2025-09-27T13:00:00.000Z', // 27-09-2025 08:00 Perú
+		reopenedAt: null as string | null,
+		businessDate: '2025-09-27', // Business date en zona horaria de Perú
+		createdAt: '2025-09-27T05:00:00.000Z',
+		updatedAt: '2025-09-27T13:00:00.000Z'
+	},
+	{
+		id: '3',
+		name: 'Caja 30 Septiembre',
+		status: 'closed', // Estado unificado
+		openingAmount: 150.00,
+		openedAt: '2025-09-30T05:00:00.000Z', // 30-09-2025 00:00 Perú
+		originalOpenedAt: '2025-09-30T05:00:00.000Z', // 30-09-2025 00:00 Perú
+		closedAt: '2025-09-30T13:00:00.000Z', // 30-09-2025 08:00 Perú
+		reopenedAt: null as string | null,
+		businessDate: '2025-09-30', // Business date en zona horaria de Perú
+		createdAt: '2025-09-30T05:00:00.000Z',
+		updatedAt: '2025-09-30T13:00:00.000Z'
 	}
 ];
 
-// Función para simular cambios de estado en desarrollo
-export function updateMockCashBoxStatus(id: string, status: 'open' | 'closed', openingAmount: number = 0, openedAt?: string, estado?: 'vacio' | 'cerrado' | 'abierto' | 'reaperturado') {
+// Función para simular cambios de estado en desarrollo (usando estado unificado)
+export function updateMockCashBoxStatus(id: string, status: 'empty' | 'open' | 'closed' | 'reopened', openingAmount: number = 0, openedAt?: string) {
 	const cashBox = mockCashBoxes.find(cb => cb.id === id);
 	if (cashBox) {
 		cashBox.status = status;
-		cashBox.estado = estado || (status === 'open' ? 'abierto' : 'cerrado');
 		
-		if (status === 'open') {
+		if (status === 'open' || status === 'reopened') {
 			cashBox.openingAmount = openingAmount;
-			cashBox.currentAmount = openingAmount;
 			cashBox.openedAt = openedAt || new Date().toISOString();
 			cashBox.closedAt = null;
+			cashBox.businessDate = toBusinessDate(cashBox.openedAt);
 			
 			// Si es reapertura, mantener la fecha original
-			if (estado === 'reaperturado') {
+			if (status === 'reopened') {
 				cashBox.reopenedAt = new Date().toISOString();
 				// No cambiar originalOpenedAt si ya existe
 				if (!cashBox.originalOpenedAt) {
-					cashBox.originalOpenedAt = cashBox.openedAt;
+					cashBox.originalOpenedAt = cashBox.openedAt || new Date().toISOString();
 				}
 			} else {
 				// Si es apertura normal, establecer originalOpenedAt
-				cashBox.originalOpenedAt = cashBox.openedAt;
+				cashBox.originalOpenedAt = cashBox.openedAt || new Date().toISOString();
 			}
-		} else {
+		} else if (status === 'closed') {
 			cashBox.closedAt = new Date().toISOString();
 			cashBox.reopenedAt = null;
+		} else if (status === 'empty') {
+			cashBox.openedAt = null as string | null;
+			cashBox.closedAt = null as string | null;
+			cashBox.reopenedAt = null as string | null;
+			cashBox.businessDate = null as string | null;
 		}
 		cashBox.updatedAt = new Date().toISOString();
 	}
@@ -76,14 +101,13 @@ export function addMockCashBox(name: string) {
 	const newCashBox = {
 		id: 'mock-' + Date.now(),
 		name,
-		status: 'closed' as const,
-		estado: 'vacio' as const,
+		status: 'empty' as const,
 		openingAmount: 0,
-		currentAmount: 0,
-		openedAt: null,
-		originalOpenedAt: null,
-		closedAt: null,
-		reopenedAt: null,
+		openedAt: null as string | null,
+		originalOpenedAt: null as string | null,
+		closedAt: null as string | null,
+		reopenedAt: null as string | null,
+		businessDate: null as string | null,
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString()
 	};
@@ -148,23 +172,32 @@ export const mockOperationDetails = [
 	}
 ];
 
-export const mockOperations = [
-	// Operaciones del 30 de septiembre de 2025 (fecha fija y consistente)
+// Función para agregar business_date a operaciones existentes
+function addBusinessDateToOperations(operations: any[]) {
+	return operations.map(op => ({
+		...op,
+		businessDate: toBusinessDate(op.createdAt)
+	}));
+}
+
+export const mockOperations = addBusinessDateToOperations([
+	// Operaciones del 27 de septiembre de 2025 (fechas fijas para Perú)
 	{
-		id: 'mock-op-30-1',
+		id: 'mock-op-27-1',
 		type: 'income',
-		amount: 50.00,
+		amount: 100.00,
 		description: 'Venta de productos - Stand A',
 		cashBoxId: '2',
 		operationDetailId: '1',
 		responsiblePersonId: '1',
 		standId: '1',
 		companyId: '1',
-		createdAt: '2025-09-30T01:00:00.000Z', // 30-09-2025 01:00
-		updatedAt: '2025-09-30T01:00:00.000Z'
+		createdAt: '2025-09-27T06:00:00.000Z', // 27-09-2025 01:00 Perú
+		updatedAt: '2025-09-27T06:00:00.000Z',
+		businessDate: '2025-09-27' // Business date en zona horaria de Perú
 	},
 	{
-		id: 'mock-op-30-2',
+		id: 'mock-op-27-2',
 		type: 'income',
 		amount: 75.50,
 		description: 'Venta de servicios - Stand B',
@@ -173,11 +206,11 @@ export const mockOperations = [
 		responsiblePersonId: '2',
 		standId: '2',
 		companyId: '2',
-		createdAt: '2025-09-30T02:00:00.000Z', // 30-09-2025 02:00
-		updatedAt: '2025-09-30T02:00:00.000Z'
+		createdAt: '2025-09-27T07:00:00.000Z', // 27-09-2025 02:00 Perú
+		updatedAt: '2025-09-27T07:00:00.000Z'
 	},
 	{
-		id: 'mock-op-30-3',
+		id: 'mock-op-27-3',
 		type: 'expense',
 		amount: 25.00,
 		description: 'Compra de materiales',
@@ -186,11 +219,11 @@ export const mockOperations = [
 		responsiblePersonId: '1',
 		standId: null,
 		companyId: '3',
-		createdAt: '2025-09-30T03:00:00.000Z', // 30-09-2025 03:00
-		updatedAt: '2025-09-30T03:00:00.000Z'
+		createdAt: '2025-09-27T08:00:00.000Z', // 27-09-2025 03:00 Perú
+		updatedAt: '2025-09-27T08:00:00.000Z'
 	},
 	{
-		id: 'mock-op-30-4',
+		id: 'mock-op-27-4',
 		type: 'income',
 		amount: 120.00,
 		description: 'Venta mayorista',
@@ -199,11 +232,11 @@ export const mockOperations = [
 		responsiblePersonId: '3',
 		standId: '3',
 		companyId: '4',
-		createdAt: '2025-09-30T04:00:00.000Z', // 30-09-2025 04:00
-		updatedAt: '2025-09-30T04:00:00.000Z'
+		createdAt: '2025-09-27T09:00:00.000Z', // 27-09-2025 04:00 Perú
+		updatedAt: '2025-09-27T09:00:00.000Z'
 	},
 	{
-		id: 'mock-op-30-5',
+		id: 'mock-op-27-5',
 		type: 'expense',
 		amount: 15.50,
 		description: 'Pago de servicios básicos',
@@ -212,11 +245,11 @@ export const mockOperations = [
 		responsiblePersonId: '2',
 		standId: null,
 		companyId: null,
-		createdAt: '2025-09-30T05:00:00.000Z', // 30-09-2025 05:00
-		updatedAt: '2025-09-30T05:00:00.000Z'
+		createdAt: '2025-09-27T10:00:00.000Z', // 27-09-2025 05:00 Perú
+		updatedAt: '2025-09-27T10:00:00.000Z'
 	},
 	{
-		id: 'mock-op-30-6',
+		id: 'mock-op-27-6',
 		type: 'income',
 		amount: 200.00,
 		description: 'Venta especial - Cliente VIP',
@@ -225,11 +258,11 @@ export const mockOperations = [
 		responsiblePersonId: '1',
 		standId: '1',
 		companyId: '5',
-		createdAt: '2025-09-30T06:00:00.000Z', // 30-09-2025 06:00
-		updatedAt: '2025-09-30T06:00:00.000Z'
+		createdAt: '2025-09-27T11:00:00.000Z', // 27-09-2025 06:00 Perú
+		updatedAt: '2025-09-27T11:00:00.000Z'
 	},
 	{
-		id: 'mock-op-30-7',
+		id: 'mock-op-27-7',
 		type: 'expense',
 		amount: 80.00,
 		description: 'Pago a proveedor',
@@ -238,11 +271,11 @@ export const mockOperations = [
 		responsiblePersonId: '3',
 		standId: null,
 		companyId: '6',
-		createdAt: '2025-09-30T07:00:00.000Z', // 30-09-2025 07:00
-		updatedAt: '2025-09-30T07:00:00.000Z'
+		createdAt: '2025-09-27T12:00:00.000Z', // 27-09-2025 07:00 Perú
+		updatedAt: '2025-09-27T12:00:00.000Z'
 	},
 	{
-		id: 'mock-op-30-8',
+		id: 'mock-op-27-8',
 		type: 'income',
 		amount: 35.75,
 		description: 'Venta al por menor',
@@ -251,11 +284,11 @@ export const mockOperations = [
 		responsiblePersonId: '2',
 		standId: '2',
 		companyId: null,
-		createdAt: '2025-09-30T07:30:00.000Z', // 30-09-2025 07:30
-		updatedAt: '2025-09-30T07:30:00.000Z'
+		createdAt: '2025-09-27T12:30:00.000Z', // 27-09-2025 07:30 Perú
+		updatedAt: '2025-09-27T12:30:00.000Z'
 	},
 	{
-		id: 'mock-op-30-9',
+		id: 'mock-op-27-9',
 		type: 'expense',
 		amount: 12.25,
 		description: 'Gastos de transporte',
@@ -264,11 +297,11 @@ export const mockOperations = [
 		responsiblePersonId: '1',
 		standId: null,
 		companyId: null,
-		createdAt: '2025-09-30T07:48:00.000Z', // 30-09-2025 07:48
-		updatedAt: '2025-09-30T07:48:00.000Z'
+		createdAt: '2025-09-27T12:48:00.000Z', // 27-09-2025 07:48 Perú
+		updatedAt: '2025-09-27T12:48:00.000Z'
 	},
 	{
-		id: 'mock-op-30-10',
+		id: 'mock-op-27-10',
 		type: 'income',
 		amount: 90.00,
 		description: 'Venta de productos premium',
@@ -277,23 +310,168 @@ export const mockOperations = [
 		responsiblePersonId: '3',
 		standId: '3',
 		companyId: '7',
-		createdAt: '2025-09-30T07:54:00.000Z', // 30-09-2025 07:54
-		updatedAt: '2025-09-30T07:54:00.000Z'
+		createdAt: '2025-09-27T12:54:00.000Z', // 27-09-2025 07:54 Perú
+		updatedAt: '2025-09-27T12:54:00.000Z'
 	},
 	{
-		id: 'mock-op-30-11',
+		id: 'mock-op-27-11',
 		type: 'expense',
-		amount: 438.50, // Ajustado para que la caja termine en 0
+		amount: 288.50, // Ajustado para que la caja termine en 200
 		description: 'Cierre de caja - Retiro final',
 		cashBoxId: '2',
 		operationDetailId: '2',
 		responsiblePersonId: '1',
 		standId: null,
 		companyId: null,
-		createdAt: '2025-09-30T08:00:00.000Z', // 30-09-2025 08:00
+		createdAt: '2025-09-27T13:00:00.000Z', // 27-09-2025 08:00 Perú
+		updatedAt: '2025-09-27T13:00:00.000Z'
+	},
+
+	// Operaciones del 30 de septiembre de 2025 (fechas fijas para Perú)
+	{
+		id: 'mock-op-30-1',
+		type: 'income',
+		amount: 80.00,
+		description: 'Venta de productos - Stand A',
+		cashBoxId: '3',
+		operationDetailId: '1',
+		responsiblePersonId: '1',
+		standId: '1',
+		companyId: '1',
+		createdAt: '2025-09-30T06:00:00.000Z', // 30-09-2025 01:00 Perú
+		updatedAt: '2025-09-30T06:00:00.000Z'
+	},
+	{
+		id: 'mock-op-30-2',
+		type: 'income',
+		amount: 95.50,
+		description: 'Venta de servicios - Stand B',
+		cashBoxId: '3',
+		operationDetailId: '1',
+		responsiblePersonId: '2',
+		standId: '2',
+		companyId: '2',
+		createdAt: '2025-09-30T07:00:00.000Z', // 30-09-2025 02:00 Perú
+		updatedAt: '2025-09-30T07:00:00.000Z'
+	},
+	{
+		id: 'mock-op-30-3',
+		type: 'expense',
+		amount: 35.00,
+		description: 'Compra de materiales',
+		cashBoxId: '3',
+		operationDetailId: '2',
+		responsiblePersonId: '1',
+		standId: null,
+		companyId: '3',
+		createdAt: '2025-09-30T08:00:00.000Z', // 30-09-2025 03:00 Perú
 		updatedAt: '2025-09-30T08:00:00.000Z'
+	},
+	{
+		id: 'mock-op-30-4',
+		type: 'income',
+		amount: 140.00,
+		description: 'Venta mayorista',
+		cashBoxId: '3',
+		operationDetailId: '1',
+		responsiblePersonId: '3',
+		standId: '3',
+		companyId: '4',
+		createdAt: '2025-09-30T09:00:00.000Z', // 30-09-2025 04:00 Perú
+		updatedAt: '2025-09-30T09:00:00.000Z'
+	},
+	{
+		id: 'mock-op-30-5',
+		type: 'expense',
+		amount: 25.50,
+		description: 'Pago de servicios básicos',
+		cashBoxId: '3',
+		operationDetailId: '2',
+		responsiblePersonId: '2',
+		standId: null,
+		companyId: null,
+		createdAt: '2025-09-30T10:00:00.000Z', // 30-09-2025 05:00 Perú
+		updatedAt: '2025-09-30T10:00:00.000Z'
+	},
+	{
+		id: 'mock-op-30-6',
+		type: 'income',
+		amount: 180.00,
+		description: 'Venta especial - Cliente VIP',
+		cashBoxId: '3',
+		operationDetailId: '1',
+		responsiblePersonId: '1',
+		standId: '1',
+		companyId: '5',
+		createdAt: '2025-09-30T11:00:00.000Z', // 30-09-2025 06:00 Perú
+		updatedAt: '2025-09-30T11:00:00.000Z'
+	},
+	{
+		id: 'mock-op-30-7',
+		type: 'expense',
+		amount: 70.00,
+		description: 'Pago a proveedor',
+		cashBoxId: '3',
+		operationDetailId: '2',
+		responsiblePersonId: '3',
+		standId: null,
+		companyId: '6',
+		createdAt: '2025-09-30T12:00:00.000Z', // 30-09-2025 07:00 Perú
+		updatedAt: '2025-09-30T12:00:00.000Z'
+	},
+	{
+		id: 'mock-op-30-8',
+		type: 'income',
+		amount: 45.75,
+		description: 'Venta al por menor',
+		cashBoxId: '3',
+		operationDetailId: '1',
+		responsiblePersonId: '2',
+		standId: '2',
+		companyId: null,
+		createdAt: '2025-09-30T12:30:00.000Z', // 30-09-2025 07:30 Perú
+		updatedAt: '2025-09-30T12:30:00.000Z'
+	},
+	{
+		id: 'mock-op-30-9',
+		type: 'expense',
+		amount: 22.25,
+		description: 'Gastos de transporte',
+		cashBoxId: '3',
+		operationDetailId: '2',
+		responsiblePersonId: '1',
+		standId: null,
+		companyId: null,
+		createdAt: '2025-09-30T12:48:00.000Z', // 30-09-2025 07:48 Perú
+		updatedAt: '2025-09-30T12:48:00.000Z'
+	},
+	{
+		id: 'mock-op-30-10',
+		type: 'income',
+		amount: 110.00,
+		description: 'Venta de productos premium',
+		cashBoxId: '3',
+		operationDetailId: '1',
+		responsiblePersonId: '3',
+		standId: '3',
+		companyId: '7',
+		createdAt: '2025-09-30T12:54:00.000Z', // 30-09-2025 07:54 Perú
+		updatedAt: '2025-09-30T12:54:00.000Z'
+	},
+	{
+		id: 'mock-op-30-11',
+		type: 'expense',
+		amount: 360.50, // Ajustado para que la caja termine en 150
+		description: 'Cierre de caja - Retiro final',
+		cashBoxId: '3',
+		operationDetailId: '2',
+		responsiblePersonId: '1',
+		standId: null,
+		companyId: null,
+		createdAt: '2025-09-30T13:00:00.000Z', // 30-09-2025 08:00 Perú
+		updatedAt: '2025-09-30T13:00:00.000Z'
 	}
-];
+]);
 
 // Función para agregar nueva operación mock
 export function addMockOperation(data: any, createdAt?: string, updatedAt?: string) {
@@ -306,11 +484,26 @@ export function addMockOperation(data: any, createdAt?: string, updatedAt?: stri
 		operationDetailId: data.operationDetailId || null,
 		responsiblePersonId: data.responsiblePersonId || null,
 		standId: data.standId || null,
+		companyId: data.companyId || null,
 		createdAt: createdAt || new Date().toISOString(),
-		updatedAt: updatedAt || new Date().toISOString()
+		updatedAt: updatedAt || new Date().toISOString(),
+		businessDate: toBusinessDate(createdAt || new Date().toISOString())
 	};
 	mockOperations.unshift(newOperation); // Agregar al inicio
 	return newOperation;
+}
+
+// Función para calcular saldo derivado (eliminando currentAmount persistido)
+export function computeCurrentAmount(cashBoxId: string): number {
+	const cashBox = mockCashBoxes.find(cb => cb.id === cashBoxId);
+	if (!cashBox) return 0;
+	
+	const operations = mockOperations.filter(op => op.cashBoxId === cashBoxId);
+	const delta = operations.reduce((acc, op) => {
+		return acc + (op.type === 'income' ? op.amount : -op.amount);
+	}, 0);
+	
+	return cashBox.openingAmount + delta;
 }
 
 // Función para agregar nuevo stand mock
@@ -333,7 +526,7 @@ export function addMockResponsiblePerson(name: string, email: string, phone?: st
 		id: 'mock-person-' + Date.now(),
 		name,
 		email,
-		phone: phone || null,
+		phone: phone || '',
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString()
 	};
@@ -356,17 +549,11 @@ export function addMockOperationDetail(name: string, type: 'income' | 'expense',
 }
 
 // Función para actualizar monto de caja mock
+// Función para actualizar monto de caja (simulación) - DEPRECATED
+// Ahora usamos saldo derivado con computeCurrentAmount()
 export async function updateMockCashBoxAmount(cashBoxId: string, amount: number, type: 'income' | 'expense') {
-	const cashBox = mockCashBoxes.find(cb => cb.id === cashBoxId);
-	if (cashBox) {
-		if (type === 'income') {
-			cashBox.currentAmount += amount;
-		} else {
-			cashBox.currentAmount -= amount;
-		}
-		cashBox.updatedAt = new Date().toISOString();
-		console.log(`Caja ${cashBox.name}: ${type === 'income' ? '+' : '-'}${amount} = ${cashBox.currentAmount}`);
-	}
+	// Esta función ya no es necesaria con saldo derivado
+	console.log(`Operación ${type} de ${amount} para caja ${cashBoxId} - Saldo derivado: ${computeCurrentAmount(cashBoxId)}`);
 }
 
 // Función para agregar nueva empresa mock

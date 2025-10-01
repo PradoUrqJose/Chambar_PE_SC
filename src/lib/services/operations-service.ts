@@ -1,5 +1,5 @@
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockOperations, addMockOperation, updateMockCashBoxAmount } from '$lib/db/mock-data';
+import { mockOperations, addMockOperation, updateMockCashBoxAmount, mockCashBoxes } from '$lib/db/mock-data';
 
 export interface Operation {
 	id: string;
@@ -12,6 +12,7 @@ export interface Operation {
 	standId?: string;
 	createdAt: string;
 	updatedAt: string;
+	businessDate: string; // Business date en zona horaria de Perú
 }
 
 export interface CreateOperationData {
@@ -33,13 +34,9 @@ export async function getOperations(platform: App.Platform, date?: string): Prom
 	if (!db) {
 		let operations = mockOperations as Operation[];
 		
-		// Filtrar por fecha si se proporciona
+		// Filtrar por fecha si se proporciona (usando zona horaria de Perú)
 		if (date) {
-			const targetDate = new Date(date);
-			operations = operations.filter(op => {
-				const opDate = new Date(op.createdAt);
-				return opDate.toDateString() === targetDate.toDateString();
-			});
+			operations = operations.filter(op => op.businessDate === date);
 		}
 		
 		return operations;
@@ -59,12 +56,25 @@ export async function createOperation(
 	
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
-		console.log('Modo desarrollo: simulando creación de operación');
+		console.log('Modo desarrollo: creando operación para caja:', data.cashBoxId);
+		
+		// Validar que la caja existe
+		const cashBox = mockCashBoxes.find(cb => cb.id === data.cashBoxId);
+		if (!cashBox) {
+			return { success: false, error: 'Caja no encontrada' };
+		}
+		
+		// Validar que la caja está abierta o reabierta
+		if (cashBox.status !== 'open' && cashBox.status !== 'reopened') {
+			return { success: false, error: 'La caja no está abierta' };
+		}
+		
 		const newOperation = addMockOperation(data, data.createdAt, data.updatedAt);
 		
 		// Actualizar monto de caja en modo desarrollo
 		await updateMockCashBoxAmount(data.cashBoxId, data.amount, data.type);
 		
+		console.log('Operación creada exitosamente:', newOperation.id);
 		return { success: true, id: newOperation.id };
 	}
 	
