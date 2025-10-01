@@ -42,6 +42,7 @@
 	
 	// Estados para tabla
 	let rowsPerPage = $state(5);
+	let currentPage = $state(1);
 	
 	// Estados para formulario de operación (ahora manejado por OperationModal)
 
@@ -507,7 +508,14 @@
 	// Función para manejar cambio de filas por página
 	function handleRowsPerPageChange(value: number) {
 		rowsPerPage = value;
+		currentPage = 1; // Reset a la primera página
 		loadOperationsForDate(currentDate, false);
+	}
+
+	// Función para manejar cambio de página
+	function handlePageChange(page: number) {
+		currentPage = page;
+		// No necesitamos recargar datos, solo cambiar la vista
 	}
 
 	// Inicialización
@@ -766,6 +774,9 @@ function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance
 					{rowsPerPage}
 					onRowsPerPageChange={handleRowsPerPageChange}
 					onAddOperation={() => showOperationsModal = true}
+					{currentPage}
+					onPageChange={handlePageChange}
+					showPagination={true}
 				/>
 			</div>
 		{/if}

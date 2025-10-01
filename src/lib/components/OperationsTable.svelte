@@ -1,15 +1,39 @@
 <script lang="ts">
 	import type { Operation } from '$lib/services/operations-service';
 	import AttachmentsPreview from './AttachmentsPreview.svelte';
+	import Pagination from './Pagination.svelte';
 
 	interface Props {
 		operations: Operation[];
 		rowsPerPage: number;
 		onRowsPerPageChange: (value: number) => void;
 		onAddOperation: () => void;
+		// Paginación
+		currentPage?: number;
+		onPageChange?: (page: number) => void;
+		showPagination?: boolean;
 	}
 
-	let { operations, rowsPerPage, onRowsPerPageChange, onAddOperation }: Props = $props();
+	let { 
+		operations, 
+		rowsPerPage, 
+		onRowsPerPageChange, 
+		onAddOperation,
+		currentPage = 1,
+		onPageChange = () => {},
+		showPagination = true
+	}: Props = $props();
+
+	// Calcular operaciones paginadas
+	let paginatedOperations = $derived.by(() => {
+		if (!showPagination) return operations;
+		
+		const start = (currentPage - 1) * rowsPerPage;
+		const end = start + rowsPerPage;
+		return operations.slice(start, end);
+	});
+
+	let totalPages = $derived.by(() => Math.ceil(operations.length / rowsPerPage));
 
 	// Función para formatear fecha en zona horaria de Perú
 	function formatDatePeru(dateStr: string): string {
@@ -104,7 +128,7 @@
 						</td>
 					</tr>
 				{:else}
-					{#each operations.slice(0, rowsPerPage) as operation}
+					{#each paginatedOperations as operation}
 						<tr class="hover:bg-gray-50">
 							<td class="px-4 py-3 border-r border-gray-200">
 								<div class="flex items-center gap-2">
@@ -151,8 +175,18 @@
 		</table>
 	</div>
 
-	<!-- Footer con información de paginación -->
-	{#if operations.length > 0}
+	<!-- Paginación -->
+	{#if showPagination && operations.length > rowsPerPage}
+		<Pagination
+			{currentPage}
+			totalPages={totalPages}
+			totalItems={operations.length}
+			itemsPerPage={rowsPerPage}
+			{onPageChange}
+			showInfo={true}
+		/>
+	{:else if operations.length > 0}
+		<!-- Footer con información (sin paginación) -->
 		<div class="px-6 py-3 bg-gray-50 border-t border-gray-200">
 			<div class="flex justify-between items-center text-sm text-gray-700">
 				<span>

@@ -6,7 +6,7 @@
 		cashBox: CashBox | null;
 		reopenType?: 'default' | 'update-balance';
 		showPreventReopenWarning?: boolean;
-		onConfirm: (event: { cashBox: CashBox; reopenType: string; allocationNote: string }) => void;
+		onConfirm: (event: { cashBox: CashBox; reopenType: 'default' | 'update-balance'; allocationNote?: string }) => void;
 		onCancel: () => void;
 	}
 
