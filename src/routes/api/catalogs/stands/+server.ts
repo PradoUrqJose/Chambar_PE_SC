@@ -1,29 +1,32 @@
 import { json } from '@sveltejs/kit';
-import { getStands, createStand } from '$lib/services/stands-service';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ platform }) => {
-	try {
-		const stands = await getStands(platform);
-		return json(stands);
-	} catch (error) {
-		console.error('Error getting stands:', error);
-		return json({ error: 'Error al obtener los stands' }, { status: 500 });
-	}
+// Mock data para stands
+let mockStands = [
+	{ id: '1', name: 'Stand A', location: 'Zona Norte', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+	{ id: '2', name: 'Stand B', location: 'Zona Sur', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+];
+
+export const GET: RequestHandler = async () => {
+	return json(mockStands);
 };
 
-export const POST: RequestHandler = async ({ request, platform }) => {
+export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const data = await request.json();
-		const result = await createStand(platform, data);
 		
-		if (result.success) {
-			return json({ message: 'Stand creado correctamente', id: result.id });
-		} else {
-			return json({ error: result.error || 'Error al crear el stand' }, { status: 500 });
-		}
+		const newStand = {
+			id: 'stand-' + Date.now(),
+			name: data.name,
+			location: data.location,
+			status: data.status || 'active',
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString()
+		};
+		
+		mockStands.push(newStand);
+		return json(newStand, { status: 201 });
 	} catch (error) {
-		console.error('Error creating stand:', error);
 		return json({ error: 'Error al crear el stand' }, { status: 500 });
 	}
 };

@@ -1,31 +1,32 @@
 import { json } from '@sveltejs/kit';
-import { getOperationDetails, createOperationDetail } from '$lib/services/operation-details-service';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ platform }) => {
-	try {
-		console.log('GET /api/catalogs/operation-details - Iniciando...');
-		const operationDetails = await getOperationDetails(platform);
-		console.log('GET /api/catalogs/operation-details - Datos obtenidos:', operationDetails);
-		return json(operationDetails);
-	} catch (error) {
-		console.error('Error getting operation details:', error);
-		return json({ error: 'Error al obtener los detalles de operación' }, { status: 500 });
-	}
+// Mock data para detalles de operación
+let mockOperationDetails = [
+	{ id: '1', name: 'Venta', type: 'income', category: 'Ventas', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+	{ id: '2', name: 'Compra', type: 'expense', category: 'Compras', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+];
+
+export const GET: RequestHandler = async () => {
+	return json(mockOperationDetails);
 };
 
-export const POST: RequestHandler = async ({ request, platform }) => {
+export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const data = await request.json();
-		const result = await createOperationDetail(platform, data);
 		
-		if (result.success) {
-			return json({ message: 'Detalle de operación creado correctamente', id: result.id });
-		} else {
-			return json({ error: result.error || 'Error al crear el detalle de operación' }, { status: 500 });
-		}
+		const newDetail = {
+			id: 'detail-' + Date.now(),
+			name: data.name,
+			type: data.type,
+			category: data.category,
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString()
+		};
+		
+		mockOperationDetails.push(newDetail);
+		return json(newDetail, { status: 201 });
 	} catch (error) {
-		console.error('Error creating operation detail:', error);
 		return json({ error: 'Error al crear el detalle de operación' }, { status: 500 });
 	}
 };

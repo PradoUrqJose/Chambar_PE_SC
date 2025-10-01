@@ -1,31 +1,32 @@
 import { json } from '@sveltejs/kit';
-import { getResponsiblePersons, createResponsiblePerson } from '$lib/services/responsible-persons-service';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ platform }) => {
-	try {
-		console.log('GET /api/catalogs/responsible-persons - Iniciando...');
-		const responsiblePersons = await getResponsiblePersons(platform);
-		console.log('GET /api/catalogs/responsible-persons - Datos obtenidos:', responsiblePersons);
-		return json(responsiblePersons);
-	} catch (error) {
-		console.error('Error getting responsible persons:', error);
-		return json({ error: 'Error al obtener los responsables' }, { status: 500 });
-	}
+// Mock data para responsables
+let mockResponsiblePersons = [
+	{ id: '1', name: 'Juan Pérez', email: 'juan@example.com', phone: '999888777', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+	{ id: '2', name: 'María García', email: 'maria@example.com', phone: '999888666', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+];
+
+export const GET: RequestHandler = async () => {
+	return json(mockResponsiblePersons);
 };
 
-export const POST: RequestHandler = async ({ request, platform }) => {
+export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const data = await request.json();
-		const result = await createResponsiblePerson(platform, data);
 		
-		if (result.success) {
-			return json({ message: 'Responsable creado correctamente', id: result.id });
-		} else {
-			return json({ error: result.error || 'Error al crear el responsable' }, { status: 500 });
-		}
+		const newPerson = {
+			id: 'person-' + Date.now(),
+			name: data.name,
+			email: data.email,
+			phone: data.phone,
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString()
+		};
+		
+		mockResponsiblePersons.push(newPerson);
+		return json(newPerson, { status: 201 });
 	} catch (error) {
-		console.error('Error creating responsible person:', error);
 		return json({ error: 'Error al crear el responsable' }, { status: 500 });
 	}
 };

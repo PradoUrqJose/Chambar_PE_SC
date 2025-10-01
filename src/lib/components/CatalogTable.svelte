@@ -163,7 +163,40 @@
 <div class="bg-white shadow rounded-lg">
 	<!-- Header -->
 	<div class="px-6 py-6 border-b border-gray-200">
-		<h3 class="text-lg font-medium text-gray-900">{title}</h3>
+		<div class="flex justify-between items-center">
+			<h3 class="text-lg font-medium text-gray-900">{title}</h3>
+			<div class="flex items-center space-x-4">
+				<!-- Selector de filas por página -->
+				<div class="flex items-center space-x-2">
+					<span class="text-sm text-gray-700">Mostrar:</span>
+					<select
+						value={itemsPerPage}
+						onchange={(e) => {
+							const target = e.target as HTMLSelectElement;
+							onItemsPerPageChange(Number(target.value));
+						}}
+						class="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+					>
+						<option value="5">5</option>
+						<option value="10">10</option>
+						<option value="20">20</option>
+						<option value="50">50</option>
+						<option value="100">100</option>
+					</select>
+				</div>
+				
+				<!-- Botón Agregar -->
+				<button
+					onclick={onAdd}
+					class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+				>
+					<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+					</svg>
+					Agregar
+				</button>
+			</div>
+		</div>
 	</div>
 
 	<!-- Mensajes de estado -->
@@ -288,42 +321,18 @@
 		</div>
 
 		<!-- Controles de paginación -->
-		{#if showPagination}
+		{#if showPagination && totalPages > 1}
 			<div class="px-6 py-4 border-t border-gray-200">
 				<div class="flex items-center justify-between">
-					<!-- Selector de filas por página -->
+					<!-- Información de paginación -->
 					<div class="flex items-center space-x-2">
-						<span class="text-sm text-gray-700">Mostrar:</span>
-						<select
-							value={itemsPerPage}
-							onchange={(e) => {
-								const target = e.target as HTMLSelectElement;
-								onItemsPerPageChange(Number(target.value));
-							}}
-							class="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-						>
-							<option value="5">5</option>
-							<option value="10">10</option>
-							<option value="20">20</option>
-							<option value="50">50</option>
-							<option value="100">100</option>
-						</select>
-						<span class="text-sm text-gray-700">de {items.length} elementos</span>
+						<span class="text-sm text-gray-700">
+							Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, items.length)} de {items.length} elementos
+						</span>
 					</div>
 
-					<!-- Información de paginación -->
-					{#if totalPages > 1}
-						<div class="flex items-center space-x-2">
-							<span class="text-sm text-gray-700">
-								Página {currentPage} de {totalPages}
-							</span>
-						</div>
-					{/if}
-				</div>
-
-				<!-- Controles de navegación -->
-				{#if totalPages > 1}
-					<div class="mt-4 flex items-center justify-center space-x-2">
+					<!-- Controles de navegación -->
+					<div class="flex items-center space-x-2">
 						<!-- Botón Anterior -->
 						<button
 							onclick={() => onPageChange(currentPage - 1)}
@@ -359,7 +368,7 @@
 							Siguiente
 						</button>
 					</div>
-				{/if}
+				</div>
 			</div>
 		{/if}
 	{/if}

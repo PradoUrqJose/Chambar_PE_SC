@@ -73,6 +73,12 @@
 	let currentPage = $state(1);
 	let itemsPerPage = $state(10);
 
+	// Estado para modales
+	let showEditModal = $state(false);
+	let showDeleteModal = $state(false);
+	let selectedItem = $state<any>(null);
+	let itemToDelete = $state<any>(null);
+
 	// Funciones de manejo de eventos
 	function handlePageChange(page: number) {
 		currentPage = page;
@@ -84,18 +90,93 @@
 	}
 
 	function handleEdit(item: any) {
-		console.log('Editar:', item);
-		// TODO: Implementar modal de edición
+		selectedItem = item;
+		showEditModal = true;
 	}
 
 	function handleDelete(item: any) {
-		console.log('Eliminar:', item);
-		// TODO: Implementar eliminación
+		itemToDelete = item;
+		showDeleteModal = true;
 	}
 
 	function handleAdd() {
-		console.log('Agregar nuevo elemento');
-		// TODO: Implementar modal de creación
+		selectedItem = null;
+		showCreateForm = true;
+	}
+
+	// Función para crear/actualizar elemento
+	async function saveItem(itemData: any) {
+		try {
+			const endpoint = getCurrentEndpoint();
+			const method = selectedItem ? 'PUT' : 'POST';
+			const url = selectedItem ? `${endpoint}/${selectedItem.id}` : endpoint;
+			
+			const response = await fetch(url, {
+				method,
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(itemData)
+			});
+
+			if (response.ok) {
+				successMessage = selectedItem ? 'Elemento actualizado correctamente' : 'Elemento creado correctamente';
+				await loadCatalogs();
+				showCreateForm = false;
+				showEditModal = false;
+				selectedItem = null;
+			} else {
+				const errorData = await response.json();
+				errorMessage = errorData.error || 'Error al guardar el elemento';
+			}
+		} catch (error) {
+			errorMessage = 'Error de red al guardar el elemento';
+		}
+	}
+
+	// Función para eliminar elemento
+	async function confirmDelete() {
+		if (!itemToDelete) return;
+
+		try {
+			const endpoint = getCurrentEndpoint();
+			const response = await fetch(`${endpoint}/${itemToDelete.id}`, {
+				method: 'DELETE'
+			});
+
+			if (response.ok) {
+				successMessage = 'Elemento eliminado correctamente';
+				await loadCatalogs();
+			} else {
+				const errorData = await response.json();
+				errorMessage = errorData.error || 'Error al eliminar el elemento';
+			}
+		} catch (error) {
+			errorMessage = 'Error de red al eliminar el elemento';
+		} finally {
+			showDeleteModal = false;
+			itemToDelete = null;
+		}
+	}
+
+	// Función para cancelar eliminación
+	function cancelDelete() {
+		showDeleteModal = false;
+		itemToDelete = null;
+	}
+
+	// Obtener endpoint según el tab activo
+	function getCurrentEndpoint() {
+		switch (activeTab) {
+			case 'empresas':
+				return '/api/catalogs/companies';
+			case 'stands':
+				return '/api/catalogs/stands';
+			case 'responsible-persons':
+				return '/api/catalogs/responsible-persons';
+			case 'operation-details':
+				return '/api/catalogs/operation-details';
+			default:
+				return '';
+		}
 	}
 
 	// Obtener el nombre del botón según el tab activo
@@ -120,7 +201,7 @@
 			isLoading = true;
 			
 			// Cargar empresas
-			const empresasResponse = await fetch('/api/companies');
+			const empresasResponse = await fetch('/api/catalogs/companies');
 			if (empresasResponse.ok) {
 				empresas = await empresasResponse.json();
 			} else {
@@ -535,3 +616,38 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Modal de confirmación de eliminación -->
+{#if showDeleteModal && itemToDelete}
+	<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+		<div class="bg-white rounded-lg shadow-xl max-w-sm w-full">
+			<!-- Header del modal -->
+			<div class="px-6 py-4 border-b border-gray-200">
+				<h3 class="text-lg font-semibold text-gray-900">Confirmar Eliminación</h3>
+			</div>
+
+			<!-- Contenido del modal -->
+			<div class="p-6">
+				<p class="text-sm text-gray-700">
+					¿Estás seguro de que deseas eliminar este elemento? Esta acción no se puede deshacer.
+				</p>
+			</div>
+
+			<!-- Footer del modal -->
+			<div class="px-6 py-4 bg-gray-50 flex justify-end space-x-3">
+				<button
+					onclick={cancelDelete}
+					class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+				>
+					Cancelar
+				</button>
+				<button
+					onclick={confirmDelete}
+					class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+				>
+					Eliminar
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
