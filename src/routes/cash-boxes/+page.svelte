@@ -18,8 +18,7 @@
 		markPendingBalanceAsHandled, 
 		transferPendingBalanceToCurrentBox,
 		debugPendingBalanceData,
-		mockCashBoxes,
-		initializeDynamicCashBoxes
+		mockCashBoxes
 	} from '$lib/db/mock-data';
 
 	let { data } = $props<{ data: PageData }>();
@@ -410,9 +409,6 @@
 	onMount(async () => {
 		
 		try {
-			// Inicializar el estado dinámico de las cajas
-			initializeDynamicCashBoxes();
-			
 			// Cargar datos secuencialmente para debug
 			await loadCashBoxes();
 			
