@@ -32,7 +32,6 @@
 	// Estados de UI
 	let showOpenForm = $state(false);
 	let openingAmount = $state(0);
-	let selectedCashBoxId = $state('');
 	let currentOpenCashBox = $state<CashBox | null>(null);
 	
 	// Estados para historial y navegación
@@ -90,17 +89,40 @@
 		return total;
 	}
 
-	// Función para obtener caja para la fecha actual
+	// Función para obtener o crear caja para la fecha actual
 	function getCashBoxForDate(date: Date): CashBox | null {
 		const targetDate = toPeruDateString(date);
 		
-		// 1. Buscar caja abierta para esa fecha específica
-		const found = cashBoxes.find(cb => cb.businessDate === targetDate && cb.status === 'open');
-		if (found) return found;
+		// 1. Buscar caja existente para esa fecha específica
+		let found = cashBoxes.find(cb => cb.businessDate === targetDate);
 		
-		// 2. Si no hay caja abierta, devolver la caja principal vacía para que se pueda abrir
-		const emptyBox = cashBoxes.find(cb => cb.id === '1' && cb.status === 'empty');
-		return emptyBox || null;
+		// 2. Si no existe, crear una nueva caja vacía para esa fecha
+		if (!found) {
+			const newCashBox = createCashBoxForDate(targetDate);
+			cashBoxes.unshift(newCashBox); // Agregar al inicio
+			found = newCashBox;
+		}
+		
+		return found;
+	}
+
+	// Función para crear una nueva caja para una fecha específica
+	function createCashBoxForDate(businessDate: string): CashBox {
+		const newId = `cashbox-${businessDate}-${Date.now()}`;
+		const newCashBox: CashBox = {
+			id: newId,
+			name: `Caja ${businessDate}`,
+			status: 'empty',
+			openingAmount: 0,
+			openedAt: null,
+			originalOpenedAt: null,
+			closedAt: null,
+			reopenedAt: null,
+			businessDate: businessDate,
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString()
+		};
+		return newCashBox;
 	}
 
 	// Helper para convertir fecha a string en zona horaria de Perú (YYYY-MM-DD)
@@ -245,16 +267,22 @@
 
 	// Función para mostrar modal de apertura de caja
 	function showOpenCashBoxModal(cashBoxId: string) {
-		selectedCashBoxId = cashBoxId;
 		openingAmount = 0;
 		showOpenForm = true;
 	}
 
 	// Función para abrir caja
 	async function openCashBox() {
-		if (!selectedCashBoxId || openingAmount < 0) return;
+		if (openingAmount < 0) return;
 
-		try {			
+		try {
+			// Obtener la caja para la fecha actual (se crea automáticamente si no existe)
+			const cashBoxForDate = getCashBoxForDate(currentDate);
+			if (!cashBoxForDate) {
+				errorMessage = 'Error: No se pudo obtener la caja para la fecha';
+				return;
+			}
+
 			// Verificar si hay saldo pendiente antes de abrir
 			const currentDateStr = toPeruDateString(currentDate);
 			const lastPendingBalance = findLastPendingBalance(currentDateStr);
@@ -267,7 +295,7 @@
 			}
 
 			// Si no hay saldo pendiente, abrir caja normalmente
-			await openCashBoxDirectly();
+			await openCashBoxDirectly(cashBoxForDate.id);
 		} catch (error) {
 			console.error('Error opening cash box:', error);
 			errorMessage = 'Error al abrir la caja';
@@ -275,21 +303,14 @@
 	}
 
 	// Función para abrir caja directamente (sin verificar saldos pendientes)
-	async function openCashBoxDirectly() {
+	async function openCashBoxDirectly(cashBoxId: string) {
 		try {
-			// Validar que selectedCashBoxId no esté vacío
-			if (!selectedCashBoxId) {
-				console.error('❌ selectedCashBoxId is empty, cannot open cash box');
-				errorMessage = 'Error: No se ha seleccionado una caja para abrir';
-				return;
-			}
-			
 			// Obtener el openingAmount actualizado directamente de mockCashBoxes
-			const mockCashBox = mockCashBoxes.find(cb => cb.id === selectedCashBoxId);
-			const currentCashBox = cashBoxes.find(cb => cb.id === selectedCashBoxId);
+			const mockCashBox = mockCashBoxes.find(cb => cb.id === cashBoxId);
+			const currentCashBox = cashBoxes.find(cb => cb.id === cashBoxId);
 			const actualOpeningAmount = mockCashBox?.openingAmount || currentCashBox?.openingAmount || openingAmount;
 			
-			const response = await fetch(`/api/cash-boxes/${selectedCashBoxId}/open`, {
+			const response = await fetch(`/api/cash-boxes/${cashBoxId}/open`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ 
@@ -301,7 +322,6 @@
 			if (response.ok) {
 				await loadCashBoxes();
 				showOpenForm = false;
-				selectedCashBoxId = ''; // Limpiar después de abrir exitosamente
 				openingAmount = 0;
 			} else {
 				const error = await response.json();
@@ -501,23 +521,25 @@
 		const { action, notes, pendingBalanceId } = event;
 		
 		try {
-			const preservedCashBoxId = selectedCashBoxId;
+			// Obtener la caja para la fecha actual
+			const cashBoxForDate = getCashBoxForDate(currentDate);
+			if (!cashBoxForDate) {
+				errorMessage = 'Error: No se pudo obtener la caja para la fecha';
+				return;
+			}
 
 			if (action === 'transfer') {
 				// Primero abrir la caja, luego crear la operación
-				selectedCashBoxId = preservedCashBoxId;
-				await openCashBoxDirectly();
+				await openCashBoxDirectly(cashBoxForDate.id);
 				
 				// Ahora crear la operación de transferencia
-				await transferPendingBalanceWithOperation(pendingBalanceId, preservedCashBoxId);
+				await transferPendingBalanceWithOperation(pendingBalanceId, cashBoxForDate.id);
 			} else if (action === 'return') {
 				markPendingBalanceAsHandled(pendingBalanceId, 'returned', notes);
-				selectedCashBoxId = preservedCashBoxId;
-				await openCashBoxDirectly();
+				await openCashBoxDirectly(cashBoxForDate.id);
 			} else if (action === 'handle') {
 				markPendingBalanceAsHandled(pendingBalanceId, 'handled', notes);
-				selectedCashBoxId = preservedCashBoxId;
-				await openCashBoxDirectly();
+				await openCashBoxDirectly(cashBoxForDate.id);
 			}
 
 			// 🔄 Recargar datos — esto ya dispara la reactividad
@@ -539,7 +561,6 @@
 		pendingBalance = null;
 		// Cerrar también el modal de apertura de caja
 		showOpenForm = false;
-		selectedCashBoxId = '';
 		openingAmount = 0;
 	}
 </script>
@@ -665,7 +686,6 @@
 					<button
 						onclick={() => {
 							showOpenForm = false;
-							selectedCashBoxId = '';
 							openingAmount = 0;
 						}}
 						class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
