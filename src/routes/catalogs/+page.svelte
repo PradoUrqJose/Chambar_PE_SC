@@ -99,6 +99,62 @@
 		showDeleteModal = true;
 	}
 
+	// Función para actualizar elemento
+	async function updateItem() {
+		try {
+			if (!selectedItem) return;
+
+			const endpoint = getCurrentEndpoint();
+			const url = `${endpoint}/${selectedItem.id}`;
+			
+			// Preparar datos según el tipo de catálogo
+			let updateData: any = {};
+			if (activeTab === 'empresas') {
+				updateData = {
+					razonSocial: selectedItem.razonSocial,
+					ruc: selectedItem.ruc
+				};
+			} else if (activeTab === 'stands') {
+				updateData = {
+					name: selectedItem.name,
+					location: selectedItem.location,
+					status: selectedItem.status
+				};
+			} else if (activeTab === 'responsible-persons') {
+				updateData = {
+					name: selectedItem.name,
+					email: selectedItem.email,
+					phone: selectedItem.phone
+				};
+			} else if (activeTab === 'operation-details') {
+				updateData = {
+					name: selectedItem.name,
+					type: selectedItem.type,
+					category: selectedItem.category
+				};
+			}
+
+			const response = await fetch(url, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(updateData)
+			});
+
+			if (response.ok) {
+				successMessage = 'Elemento actualizado correctamente';
+				await loadCatalogs();
+				showEditModal = false;
+				selectedItem = null;
+			} else {
+				const errorData = await response.json();
+				errorMessage = errorData.error || 'Error al actualizar el elemento';
+			}
+		} catch (error) {
+			errorMessage = 'Error de red al actualizar el elemento';
+			console.error('Error updating item:', error);
+		}
+	}
+
 	function handleAdd() {
 		selectedItem = null;
 		showCreateForm = true;
@@ -523,6 +579,158 @@
 				successMessage={successMessage}
 			/>
 		{/if}
+	{/if}
+
+	<!-- Modal de edición -->
+	{#if showEditModal && selectedItem}
+		<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+			<div class="bg-white rounded-lg p-6 w-96">
+				<h3 class="text-lg font-medium text-gray-900 mb-4">
+					Editar {getCurrentTabName()}
+				</h3>
+				
+				{#if activeTab === 'empresas'}
+					<div class="space-y-4">
+						<div>
+							<label for="edit-empresa-razon" class="block text-sm font-medium text-gray-700 mb-2">Razón Social</label>
+							<input
+								id="edit-empresa-razon"
+								type="text"
+								bind:value={selectedItem.razonSocial}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+								placeholder="Ingrese la razón social"
+							/>
+						</div>
+						<div>
+							<label for="edit-empresa-ruc" class="block text-sm font-medium text-gray-700 mb-2">RUC</label>
+							<input
+								id="edit-empresa-ruc"
+								type="text"
+								bind:value={selectedItem.ruc}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+								placeholder="Ingrese el RUC"
+							/>
+						</div>
+					</div>
+				{:else if activeTab === 'stands'}
+					<div class="space-y-4">
+						<div>
+							<label for="edit-stand-name" class="block text-sm font-medium text-gray-700 mb-2">Nombre del Stand</label>
+							<input
+								id="edit-stand-name"
+								type="text"
+								bind:value={selectedItem.name}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+								placeholder="Ingrese el nombre del stand"
+							/>
+						</div>
+						<div>
+							<label for="edit-stand-location" class="block text-sm font-medium text-gray-700 mb-2">Ubicación</label>
+							<input
+								id="edit-stand-location"
+								type="text"
+								bind:value={selectedItem.location}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+								placeholder="Ingrese la ubicación"
+							/>
+						</div>
+						<div>
+							<label for="edit-stand-status" class="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+							<select
+								id="edit-stand-status"
+								bind:value={selectedItem.status}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+							>
+								<option value="active">Activo</option>
+								<option value="inactive">Inactivo</option>
+							</select>
+						</div>
+					</div>
+				{:else if activeTab === 'responsible-persons'}
+					<div class="space-y-4">
+						<div>
+							<label for="edit-person-name" class="block text-sm font-medium text-gray-700 mb-2">Nombre</label>
+							<input
+								id="edit-person-name"
+								type="text"
+								bind:value={selectedItem.name}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+								placeholder="Ingrese el nombre"
+							/>
+						</div>
+						<div>
+							<label for="edit-person-email" class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+							<input
+								id="edit-person-email"
+								type="email"
+								bind:value={selectedItem.email}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+								placeholder="Ingrese el email"
+							/>
+						</div>
+						<div>
+							<label for="edit-person-phone" class="block text-sm font-medium text-gray-700 mb-2">Teléfono</label>
+							<input
+								id="edit-person-phone"
+								type="text"
+								bind:value={selectedItem.phone}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+								placeholder="Ingrese el teléfono"
+							/>
+						</div>
+					</div>
+				{:else if activeTab === 'operation-details'}
+					<div class="space-y-4">
+						<div>
+							<label for="edit-detail-name" class="block text-sm font-medium text-gray-700 mb-2">Nombre</label>
+							<input
+								id="edit-detail-name"
+								type="text"
+								bind:value={selectedItem.name}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+								placeholder="Ingrese el nombre del detalle"
+							/>
+						</div>
+						<div>
+							<label for="edit-detail-type" class="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+							<select
+								id="edit-detail-type"
+								bind:value={selectedItem.type}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+							>
+								<option value="income">Ingreso</option>
+								<option value="expense">Gasto</option>
+							</select>
+						</div>
+						<div>
+							<label for="edit-detail-category" class="block text-sm font-medium text-gray-700 mb-2">Categoría</label>
+							<input
+								id="edit-detail-category"
+								type="text"
+								bind:value={selectedItem.category}
+								class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+								placeholder="Ingrese la categoría"
+							/>
+						</div>
+					</div>
+				{/if}
+				
+				<div class="flex justify-end space-x-3 mt-6">
+					<button
+						onclick={() => { showEditModal = false; selectedItem = null; }}
+						class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+					>
+						Cancelar
+					</button>
+					<button
+						onclick={updateItem}
+						class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+					>
+						Actualizar
+					</button>
+				</div>
+			</div>
+		</div>
 	{/if}
 
 	<!-- Modal de creación -->
