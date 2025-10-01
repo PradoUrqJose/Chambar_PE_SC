@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
+	import { CatalogTable } from '$lib/components';
 
 	let { data } = $props<{ data: PageData }>();
 	
 	let isLoading = $state(true);
 	let activeTab = $state('empresas');
 	let errorMessage = $state('');
+	let successMessage = $state('');
 	let showCreateForm = $state(false);
 	let newItem = $state({
 		name: '',
@@ -18,10 +20,83 @@
 	});
 
 	// Datos mock para los catálogos
-	let empresas = $state([]);
-	let stands = $state([]);
-	let responsiblePersons = $state([]);
-	let operationDetails = $state([]);
+	let empresas = $state<any[]>([]);
+	let stands = $state<any[]>([]);
+	let responsiblePersons = $state<any[]>([]);
+	let operationDetails = $state<any[]>([]);
+
+	// Configuraciones de columnas para cada catálogo
+	const empresasColumns = [
+		{ key: 'razonSocial', label: 'Razón Social', type: 'text' as const },
+		{ key: 'ruc', label: 'RUC', type: 'text' as const }
+	];
+
+	const standsColumns = [
+		{ key: 'name', label: 'Nombre', type: 'text' as const },
+		{ key: 'location', label: 'Ubicación', type: 'text' as const },
+		{ 
+			key: 'status', 
+			label: 'Estado', 
+			type: 'badge' as const,
+			badgeConfig: {
+				values: {
+					'active': { text: 'Activo', class: 'bg-green-100 text-green-800' },
+					'inactive': { text: 'Inactivo', class: 'bg-red-100 text-red-800' }
+				}
+			}
+		}
+	];
+
+	const responsiblePersonsColumns = [
+		{ key: 'name', label: 'Nombre', type: 'text' as const },
+		{ key: 'email', label: 'Email', type: 'email' as const },
+		{ key: 'phone', label: 'Teléfono', type: 'phone' as const }
+	];
+
+	const operationDetailsColumns = [
+		{ key: 'name', label: 'Nombre', type: 'text' as const },
+		{ key: 'category', label: 'Categoría', type: 'text' as const },
+		{ 
+			key: 'type', 
+			label: 'Tipo', 
+			type: 'badge' as const,
+			badgeConfig: {
+				values: {
+					'income': { text: 'Ingreso', class: 'bg-green-100 text-green-800' },
+					'expense': { text: 'Egreso', class: 'bg-red-100 text-red-800' }
+				}
+			}
+		}
+	];
+
+	// Estado de paginación
+	let currentPage = $state(1);
+	let itemsPerPage = $state(10);
+
+	// Funciones de manejo de eventos
+	function handlePageChange(page: number) {
+		currentPage = page;
+	}
+
+	function handleItemsPerPageChange(newItemsPerPage: number) {
+		itemsPerPage = newItemsPerPage;
+		currentPage = 1; // Reset to first page
+	}
+
+	function handleEdit(item: any) {
+		console.log('Editar:', item);
+		// TODO: Implementar modal de edición
+	}
+
+	function handleDelete(item: any) {
+		console.log('Eliminar:', item);
+		// TODO: Implementar eliminación
+	}
+
+	function handleAdd() {
+		console.log('Agregar nuevo elemento');
+		// TODO: Implementar modal de creación
+	}
 
 	// Cargar datos de catálogos
 	async function loadCatalogs() {
@@ -299,91 +374,69 @@
 
 		<!-- Contenido de tabs -->
 		{#if activeTab === 'empresas'}
-			<div class="bg-white shadow rounded-lg">
-				<div class="px-6 py-4 border-b border-gray-200">
-					<h3 class="text-lg font-medium text-gray-900">Empresas</h3>
-				</div>
-				<div class="divide-y divide-gray-200">
-					{#each empresas as empresa}
-						<div class="px-6 py-4 flex items-center justify-between">
-							<div>
-								<h4 class="text-sm font-medium text-gray-900">{empresa.razonSocial}</h4>
-								<p class="text-sm text-gray-500">RUC: {empresa.ruc}</p>
-							</div>
-							<div class="flex space-x-2">
-								<button class="text-green-600 hover:text-green-900 text-sm font-medium">Editar</button>
-								<button class="text-red-600 hover:text-red-900 text-sm font-medium">Eliminar</button>
-							</div>
-						</div>
-					{/each}
-				</div>
-			</div>
+			<CatalogTable
+				items={empresas}
+				columns={empresasColumns}
+				title="Empresas"
+				currentPage={currentPage}
+				itemsPerPage={itemsPerPage}
+				onPageChange={handlePageChange}
+				onItemsPerPageChange={handleItemsPerPageChange}
+				onEdit={handleEdit}
+				onDelete={handleDelete}
+				onAdd={handleAdd}
+				isLoading={isLoading}
+				errorMessage={errorMessage}
+				successMessage={successMessage}
+			/>
 		{:else if activeTab === 'stands'}
-			<div class="bg-white shadow rounded-lg">
-				<div class="px-6 py-4 border-b border-gray-200">
-					<h3 class="text-lg font-medium text-gray-900">Stands</h3>
-				</div>
-				<div class="divide-y divide-gray-200">
-					{#each stands as stand}
-						<div class="px-6 py-4 flex items-center justify-between">
-							<div>
-								<p class="text-sm font-medium text-gray-900">{stand.name}</p>
-								<p class="text-sm text-gray-500">{stand.location}</p>
-							</div>
-							<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-								{stand.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}"
-							>
-								{stand.status === 'active' ? 'Activo' : 'Inactivo'}
-							</span>
-						</div>
-					{/each}
-				</div>
-			</div>
+			<CatalogTable
+				items={stands}
+				columns={standsColumns}
+				title="Stands"
+				currentPage={currentPage}
+				itemsPerPage={itemsPerPage}
+				onPageChange={handlePageChange}
+				onItemsPerPageChange={handleItemsPerPageChange}
+				onEdit={handleEdit}
+				onDelete={handleDelete}
+				onAdd={handleAdd}
+				isLoading={isLoading}
+				errorMessage={errorMessage}
+				successMessage={successMessage}
+			/>
 		{:else if activeTab === 'responsible-persons'}
-			<div class="bg-white shadow rounded-lg">
-				<div class="px-6 py-4 border-b border-gray-200">
-					<h3 class="text-lg font-medium text-gray-900">Personas Responsables</h3>
-				</div>
-				<div class="divide-y divide-gray-200">
-					{#each responsiblePersons as person}
-						<div class="px-6 py-4">
-							<div class="flex items-center">
-								<div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-									<svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-									</svg>
-								</div>
-								<div class="ml-4">
-									<p class="text-sm font-medium text-gray-900">{person.name}</p>
-									<p class="text-sm text-gray-500">{person.email}</p>
-									<p class="text-sm text-gray-500">{person.phone}</p>
-								</div>
-							</div>
-						</div>
-					{/each}
-				</div>
-			</div>
+			<CatalogTable
+				items={responsiblePersons}
+				columns={responsiblePersonsColumns}
+				title="Personas Responsables"
+				currentPage={currentPage}
+				itemsPerPage={itemsPerPage}
+				onPageChange={handlePageChange}
+				onItemsPerPageChange={handleItemsPerPageChange}
+				onEdit={handleEdit}
+				onDelete={handleDelete}
+				onAdd={handleAdd}
+				isLoading={isLoading}
+				errorMessage={errorMessage}
+				successMessage={successMessage}
+			/>
 		{:else if activeTab === 'operation-details'}
-			<div class="bg-white shadow rounded-lg">
-				<div class="px-6 py-4 border-b border-gray-200">
-					<h3 class="text-lg font-medium text-gray-900">Detalles de Operación</h3>
-				</div>
-				<div class="divide-y divide-gray-200">
-					{#each operationDetails as detail}
-						<div class="px-6 py-4 flex items-center justify-between">
-							<div>
-								<p class="text-sm font-medium text-gray-900">{detail.name}</p>
-								<p class="text-sm text-gray-500">{detail.category}</p>
-							</div>
-							<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-								{detail.type === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}"
-							>
-								{detail.type === 'income' ? 'Ingreso' : 'Egreso'}
-							</span>
-						</div>
-					{/each}
-				</div>
-			</div>
+			<CatalogTable
+				items={operationDetails}
+				columns={operationDetailsColumns}
+				title="Detalles de Operación"
+				currentPage={currentPage}
+				itemsPerPage={itemsPerPage}
+				onPageChange={handlePageChange}
+				onItemsPerPageChange={handleItemsPerPageChange}
+				onEdit={handleEdit}
+				onDelete={handleDelete}
+				onAdd={handleAdd}
+				isLoading={isLoading}
+				errorMessage={errorMessage}
+				successMessage={successMessage}
+			/>
 		{/if}
 	{/if}
 
