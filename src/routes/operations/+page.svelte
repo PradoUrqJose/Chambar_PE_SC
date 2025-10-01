@@ -160,12 +160,37 @@
 	}
 
 	// Manejar éxito de operación (crear/editar)
-	function handleOperationSuccess() {
-		successMessage = 'Operación guardada exitosamente';
-		showOperationModal = false;
-		selectedOperation = null;
-		loadOperations(); // Recargar operaciones
-		applyFilters(); // Reaplicar filtros
+	async function handleOperationSuccess(operationData: any) {
+		try {
+			if (selectedOperation) {
+				// Modo edición
+				const response = await fetch(`/api/operations?id=${selectedOperation.id}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(operationData)
+				});
+
+				if (response.ok) {
+					successMessage = 'Operación actualizada exitosamente';
+				} else {
+					const errorData = await response.json();
+					errorMessage = errorData.error || 'Error al actualizar la operación';
+					return;
+				}
+			} else {
+				// Modo creación (no debería pasar en esta página)
+				errorMessage = 'No se puede crear operaciones desde esta página';
+				return;
+			}
+
+			showOperationModal = false;
+			selectedOperation = null;
+			await loadOperations(); // Recargar operaciones
+			applyFilters(); // Reaplicar filtros
+		} catch (error) {
+			console.error('Error saving operation:', error);
+			errorMessage = 'Error de red al guardar la operación';
+		}
 	}
 
 	// Limpiar mensajes

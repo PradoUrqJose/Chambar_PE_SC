@@ -52,6 +52,13 @@
 	let filteredOperationDetails = $derived(
 		operationDetails.filter(detail => detail.type === formData.type)
 	);
+
+	// Inicializar formulario cuando se abre el modal o cambia la operación
+	$effect(() => {
+		if (isOpen) {
+			initializeForm();
+		}
+	});
 	
 	// Función para manejar el cambio de tipo de operación
 	function handleTypeChange() {
@@ -59,21 +66,41 @@
 		formData.operationDetailId = '';
 	}
 
-	// Función para resetear el formulario
-	function resetForm() {
-		formData = {
-			type: 'income',
-			amount: 0,
-			description: '',
-			operationDetailId: '',
-			responsiblePersonId: '',
-			standId: '',
-			companyId: '',
-			image: null
-		};
+	// Función para inicializar el formulario con datos de operación
+	function initializeForm() {
+		if (operation) {
+			// Modo edición - cargar datos de la operación
+			formData = {
+				type: operation.type,
+				amount: operation.amount,
+				description: operation.description,
+				operationDetailId: operation.operationDetailId || '',
+				responsiblePersonId: operation.responsiblePersonId || '',
+				standId: operation.standId || '',
+				companyId: operation.companyId || '',
+				image: null
+			};
+		} else {
+			// Modo creación - valores por defecto
+			formData = {
+				type: 'income',
+				amount: 0,
+				description: '',
+				operationDetailId: '',
+				responsiblePersonId: '',
+				standId: '',
+				companyId: '',
+				image: null
+			};
+		}
 		uploadedFiles = [];
 		compressionStats = {};
 		errorMessage = '';
+	}
+
+	// Función para resetear el formulario
+	function resetForm() {
+		initializeForm();
 	}
 
 	// Función para manejar el cierre del modal
@@ -137,11 +164,19 @@
 				isUploading = false;
 			}
 
-			// Enviar operación con archivos adjuntos
-			await onSubmit({
+			// Preparar datos de la operación
+			const operationData: any = {
 				...formData,
 				attachments: attachments.length > 0 ? attachments : undefined
-			});
+			};
+
+			// Si estamos editando, agregar el ID
+			if (operation) {
+				operationData.id = operation.id;
+			}
+
+			// Enviar operación
+			await onSubmit(operationData);
 			handleClose();
 		} catch (error) {
 			errorMessage = 'Error al crear la operación';
@@ -197,7 +232,9 @@
 			<!-- Header del modal -->
 			<div class="px-6 py-4 border-b border-gray-200">
 				<div class="flex justify-between items-center">
-					<h3 class="text-lg font-semibold text-gray-900">Agregar Operación</h3>
+					<h3 class="text-lg font-semibold text-gray-900">
+						{operation ? 'Editar Operación' : 'Agregar Operación'}
+					</h3>
 					<button
 						onclick={handleClose}
 						class="text-gray-400 hover:text-gray-600 transition-colors"
@@ -457,7 +494,7 @@
 							</svg>
 							Creando...
 						{:else}
-							Crear Operación
+							{operation ? 'Actualizar Operación' : 'Crear Operación'}
 						{/if}
 					</button>
 				</div>

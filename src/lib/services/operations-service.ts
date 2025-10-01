@@ -11,6 +11,7 @@ export interface Operation {
 	operationDetailId?: string;
 	responsiblePersonId?: string;
 	standId?: string;
+	companyId?: string;
 	attachments?: Attachment[];
 	createdAt: string;
 	updatedAt: string;
@@ -25,6 +26,7 @@ export interface CreateOperationData {
 	operationDetailId?: string;
 	responsiblePersonId?: string;
 	standId?: string;
+	companyId?: string;
 	attachments?: Attachment[];
 	reopenBatchId?: string;
 	isReopenOperation?: boolean;

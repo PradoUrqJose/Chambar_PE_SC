@@ -214,6 +214,26 @@ export function addMockOperation(operation: {
 	return newOperation;
 }
 
+// Función para actualizar operación mock
+export function updateMockOperation(operationId: string, updateData: Partial<typeof mockOperations[0]>): boolean {
+	const index = mockOperations.findIndex(op => op.id === operationId);
+	if (index !== -1) {
+		mockOperations[index] = { ...mockOperations[index], ...updateData };
+		return true;
+	}
+	return false;
+}
+
+// Función para eliminar operación mock
+export function deleteMockOperation(operationId: string): boolean {
+	const index = mockOperations.findIndex(op => op.id === operationId);
+	if (index !== -1) {
+		mockOperations.splice(index, 1);
+		return true;
+	}
+	return false;
+}
+
 // Función para calcular saldo derivado (solo suma de operaciones)
 export function computeCurrentAmount(cashBoxId: string): number {
 	const cashBox = mockCashBoxes.find(cb => cb.id === cashBoxId);
