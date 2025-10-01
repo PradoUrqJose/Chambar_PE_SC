@@ -5,9 +5,11 @@
 	let { data } = $props<{ data: PageData }>();
 	
 	let isLoading = $state(true);
-	let operations = $state([]);
+	let operations = $state<any[]>([]);
 	let errorMessage = $state('');
 	let showNewOperationForm = $state(false);
+	let cashBoxes = $state<any[]>([]);
+	let openCashBox = $state<any>(null);
 
 	// Datos del formulario de nueva operación
 	let newOperation = $state({
@@ -23,11 +25,25 @@
 	});
 
 	// Datos para los selects
-	let operationDetails = $state([]);
-	let responsiblePersons = $state([]);
-	let stands = $state([]);
-	let companies = $state([]);
-	let selectedOperationDetail = $state(null);
+	let operationDetails = $state<any[]>([]);
+	let responsiblePersons = $state<any[]>([]);
+	let stands = $state<any[]>([]);
+	let companies = $state<any[]>([]);
+	let selectedOperationDetail = $state<any>(null);
+
+	// Cargar cajas y verificar estado
+	async function loadCashBoxes() {
+		try {
+			const response = await fetch('/api/cash-boxes');
+			if (response.ok) {
+				cashBoxes = await response.json();
+				// Buscar caja abierta
+				openCashBox = cashBoxes.find(cb => cb.status === 'open') || null;
+			}
+		} catch (error) {
+			console.error('Error loading cash boxes:', error);
+		}
+	}
 
 	// Cargar datos para los selects
 	async function loadSelectData() {
@@ -96,6 +112,22 @@
 		}
 	}
 
+	// Validar si se puede crear operación
+	function canCreateOperation() {
+		if (!openCashBox) {
+			errorMessage = 'No hay ninguna caja abierta. Debe abrir una caja antes de crear operaciones.';
+			return false;
+		}
+		return true;
+	}
+
+	// Mostrar modal de nueva operación (con validación)
+	function showNewOperationModal() {
+		if (canCreateOperation()) {
+			showNewOperationForm = true;
+		}
+	}
+
 	// Crear nueva operación
 	async function createOperation() {
 		try {
@@ -154,7 +186,7 @@
 	}
 
 	// Manejar carga de imagen
-	function handleImageUpload(event) {
+	function handleImageUpload(event: any) {
 		const file = event.target.files[0];
 		if (file) {
 			newOperation.image = file;
@@ -180,6 +212,7 @@
 	onMount(() => {
 		loadOperations();
 		loadSelectData();
+		loadCashBoxes();
 	});
 </script>
 
@@ -194,12 +227,30 @@
 			<div>
 				<h1 class="text-3xl font-bold text-gray-900">Operaciones</h1>
 				<p class="mt-2 text-gray-600">Gestiona ingresos y egresos del sistema</p>
+				
+				<!-- Estado de caja -->
+				{#if openCashBox}
+					<div class="mt-2 flex items-center space-x-2">
+						<div class="w-3 h-3 bg-green-500 rounded-full"></div>
+						<span class="text-sm font-medium text-green-700">
+							Caja abierta: {openCashBox.name} - S/. {openCashBox.currentAmount.toFixed(2)}
+						</span>
+					</div>
+				{:else}
+					<div class="mt-2 flex items-center space-x-2">
+						<div class="w-3 h-3 bg-red-500 rounded-full"></div>
+						<span class="text-sm font-medium text-red-700">
+							No hay caja abierta - No se pueden crear operaciones
+						</span>
+					</div>
+				{/if}
 			</div>
 			<button
-				onclick={() => showNewOperationForm = true}
-				class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+				onclick={showNewOperationModal}
+				class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+				disabled={!openCashBox}
 			>
-				Nueva Operación
+				{openCashBox ? 'Nueva Operación' : 'No hay caja abierta'}
 			</button>
 		</div>
 	</div>
@@ -272,6 +323,7 @@
 								resetForm();
 							}}
 							class="text-gray-400 hover:text-gray-600 transition-colors"
+							aria-label="Cerrar modal"
 						>
 							<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>

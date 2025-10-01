@@ -5,13 +5,14 @@
 	let { data } = $props<{ data: PageData }>();
 	
 	let isLoading = $state(true);
-	let cashBoxes = $state([]);
+	let cashBoxes = $state<any[]>([]);
 	let errorMessage = $state('');
 	let showCreateForm = $state(false);
 	let newCashBoxName = $state('');
 	let showOpenForm = $state(false);
 	let openingAmount = $state(0);
 	let selectedCashBoxId = $state('');
+	let currentOpenCashBox = $state<any>(null);
 
 	// Cargar cajas
 	async function loadCashBoxes() {
@@ -20,6 +21,8 @@
 			const response = await fetch('/api/cash-boxes');
 			if (response.ok) {
 				cashBoxes = await response.json();
+				// Buscar caja abierta
+				currentOpenCashBox = cashBoxes.find(cb => cb.status === 'open') || null;
 			}
 		} catch (error) {
 			errorMessage = 'Error al cargar las cajas';
@@ -29,8 +32,12 @@
 		}
 	}
 
-	// Mostrar modal de apertura
+	// Mostrar modal de apertura (con validación)
 	function showOpenCashBoxModal(cashBoxId: string) {
+		if (currentOpenCashBox) {
+			errorMessage = `Ya hay una caja abierta: ${currentOpenCashBox.name}. Debe cerrar la caja actual antes de abrir otra.`;
+			return;
+		}
 		selectedCashBoxId = cashBoxId;
 		openingAmount = 0;
 		showOpenForm = true;
@@ -55,6 +62,7 @@
 			if (response.ok) {
 				showOpenForm = false;
 				await loadCashBoxes(); // Recargar cajas
+				errorMessage = ''; // Limpiar errores
 			} else {
 				const error = await response.json();
 				errorMessage = error.message || 'Error al abrir la caja';
@@ -74,6 +82,7 @@
 
 			if (response.ok) {
 				await loadCashBoxes(); // Recargar cajas
+				errorMessage = ''; // Limpiar errores
 			} else {
 				const error = await response.json();
 				errorMessage = error.message || 'Error al cerrar la caja';
@@ -130,6 +139,23 @@
 			<div>
 				<h1 class="text-3xl font-bold text-gray-900">Gestión de Caja</h1>
 				<p class="mt-2 text-gray-600">Administra las cajas registradoras del sistema</p>
+				
+				<!-- Estado de caja -->
+				{#if currentOpenCashBox}
+					<div class="mt-2 flex items-center space-x-2">
+						<div class="w-3 h-3 bg-green-500 rounded-full"></div>
+						<span class="text-sm font-medium text-green-700">
+							Caja abierta: {currentOpenCashBox.name} - S/. {currentOpenCashBox.currentAmount.toFixed(2)}
+						</span>
+					</div>
+				{:else}
+					<div class="mt-2 flex items-center space-x-2">
+						<div class="w-3 h-3 bg-red-500 rounded-full"></div>
+						<span class="text-sm font-medium text-red-700">
+							No hay caja abierta - Solo se puede abrir una caja a la vez
+						</span>
+					</div>
+				{/if}
 			</div>
 			<button
 				onclick={() => showCreateForm = true}
@@ -181,9 +207,13 @@
 							{#if cashBox.status === 'closed'}
 								<button
 									onclick={() => showOpenCashBoxModal(cashBox.id)}
-									class="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+									class="w-full px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500
+										{currentOpenCashBox 
+											? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+											: 'bg-green-600 text-white hover:bg-green-700'}"
+									disabled={!!currentOpenCashBox}
 								>
-									Abrir Caja
+									{currentOpenCashBox ? 'Ya hay caja abierta' : 'Abrir Caja'}
 								</button>
 							{:else}
 								<button
