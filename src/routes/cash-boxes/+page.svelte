@@ -174,7 +174,10 @@
 		try {
 			// Asegurar que existe la caja para la fecha actual
 			const targetDate = toPeruDateString(currentDate);
-			getCashBoxByDate(targetDate);
+			console.log('📦 loadCashBoxes - targetDate:', targetDate);
+			
+			const createdBox = getCashBoxByDate(targetDate);
+			console.log('📦 Caja creada/obtenida:', createdBox);
 			
 			// Cargar desde la API
 			const response = await fetch('/api/cash-boxes');
@@ -182,8 +185,9 @@
 			if (response.ok) {
 				const data = await response.json();
 				cashBoxes = data;
+				console.log(`📦 Cajas cargadas desde API:`, cashBoxes);
+				console.log(`📦 cashBoxForDate (derived):`, cashBoxForDate);
 				updateCurrentOpenCashBox();
-				console.log(`📦 Cajas cargadas: ${cashBoxes.length} | Caja para ${targetDate}:`, cashBoxForDate);
 			} else {
 				console.error('❌ Error loading cash boxes:', response.statusText);
 			}
@@ -530,16 +534,15 @@
 		{/if}
 
 		<!-- Debug info -->
-		<!--
 		<div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
 			<h4 class="font-semibold text-yellow-800">Debug Info:</h4>
 			<p class="text-sm text-yellow-700">isLoading: {isLoading}</p>
 			<p class="text-sm text-yellow-700">cashBoxes.length: {cashBoxes.length}</p>
-			<p class="text-sm text-yellow-700">operations.length: {operationsArray.length}</p>
+			<p class="text-sm text-yellow-700">operations.length: {operations.length}</p>
 			<p class="text-sm text-yellow-700">cashBoxForDate: {cashBoxForDate ? cashBoxForDate.name : 'null'}</p>
 			<p class="text-sm text-yellow-700">currentDate: {currentDate.toISOString()}</p>
+			<p class="text-sm text-yellow-700">targetDate: {toPeruDateString(currentDate)}</p>
 		</div>
-		-->
 		<!-- Loading state -->
 		{#if isLoading}
 			<div class="flex justify-center items-center py-12">
