@@ -276,15 +276,66 @@
 		try {
 			// Verificar si hay saldo pendiente antes de abrir
 			const currentDateStr = toPeruDateString(currentDate);
-			const lastPendingBalance = findLastPendingBalance(currentDateStr);
+			console.log('🔍 Buscando saldos pendientes. Cajas actuales:', cashBoxes);
 			
-			if (lastPendingBalance && validatePendingBalance(lastPendingBalance, currentDateStr)) {
-				// Mostrar modal de saldo pendiente
-				pendingBalance = lastPendingBalance;
-				showPendingBalanceModal = true;
-				return; // No abrir la caja hasta que se maneje el saldo pendiente
+			// Buscar manualmente en las cajas cargadas
+			const closedBoxesWithPending = cashBoxes.filter(cb => {
+				const isClosed = cb.status === 'closed';
+				const isBeforeCurrentDate = cb.businessDate < currentDateStr;
+				
+				console.log(`   Revisando ${cb.name}:`, {
+					status: cb.status,
+					businessDate: cb.businessDate,
+					isClosed,
+					isBeforeCurrentDate
+				});
+				
+				return isClosed && isBeforeCurrentDate;
+			});
+			
+			console.log('📋 Cajas cerradas anteriores:', closedBoxesWithPending);
+			
+			// Si hay cajas cerradas, calcular su saldo final
+			if (closedBoxesWithPending.length > 0) {
+				// Ordenar por fecha (más reciente primero)
+				const sortedBoxes = closedBoxesWithPending.sort((a, b) => 
+					new Date(b.businessDate).getTime() - new Date(a.businessDate).getTime()
+				);
+				
+				const latestClosedBox = sortedBoxes[0];
+				
+				// Obtener operaciones de esa caja para calcular saldo
+				const opsResponse = await fetch(`/api/operations?date=${latestClosedBox.businessDate}`);
+				if (opsResponse.ok) {
+					const opsData = await opsResponse.json();
+					const finalBalance = opsData.operations.reduce((sum: number, op: any) => {
+						return op.cashBoxId === latestClosedBox.id
+							? (op.type === 'income' ? sum + op.amount : sum - op.amount)
+							: sum;
+					}, 0);
+					
+					console.log(`💰 Saldo final de ${latestClosedBox.name}: ${finalBalance}`);
+					
+					if (finalBalance > 0) {
+						// Crear pendingBalance
+						const lastPendingBalance = {
+							id: `pending-${latestClosedBox.id}`,
+							cashBoxId: latestClosedBox.id,
+							amount: finalBalance,
+							date: latestClosedBox.businessDate,
+							status: 'pending' as const,
+							notes: `Saldo pendiente de ${latestClosedBox.name}`
+						};
+						
+						pendingBalance = lastPendingBalance;
+						showPendingBalanceModal = true;
+						console.log('⚠️ Mostrando modal de saldo pendiente');
+						return; // No abrir la caja hasta que se maneje el saldo pendiente
+					}
+				}
 			}
 
+			// Si no hay saldo pendiente, continuar con apertura normal
 			// Si es una caja temporal (no existe en backend), crearla primero
 			if (cashBoxForDate.id.startsWith('temp-')) {
 				await createAndOpenCashBox();
