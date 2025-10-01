@@ -5,10 +5,13 @@ export interface CashBox {
 	id: string;
 	name: string;
 	status: 'open' | 'closed';
+	estado: 'vacio' | 'cerrado' | 'abierto' | 'reaperturado';
 	openingAmount: number;
 	currentAmount: number;
 	openedAt?: string;
+	originalOpenedAt?: string; // Fecha original de apertura (antes de reapertura)
 	closedAt?: string;
+	reopenedAt?: string;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -54,21 +57,26 @@ export async function createCashBox(
 export async function openCashBox(
 	platform: App.Platform,
 	id: string,
-	openingAmount: number = 0
+	openingAmount: number = 0,
+	openedAt?: string,
+	estado: 'abierto' | 'reaperturado' = 'abierto'
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
 	
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
 		console.log('Modo desarrollo: simulando apertura de caja');
-		updateMockCashBoxStatus(id, 'open', openingAmount);
+		updateMockCashBoxStatus(id, 'open', openingAmount, openedAt, estado);
 		return { success: true };
 	}
 	
+	const openTime = openedAt || new Date().toISOString();
+	const reopenedTime = estado === 'reaperturado' ? new Date().toISOString() : null;
+	
 	return await executeMutation(
 		db,
-		'UPDATE cash_boxes SET status = ?, opening_amount = ?, current_amount = ?, opened_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-		['open', openingAmount, openingAmount, id]
+		'UPDATE cash_boxes SET status = ?, estado = ?, opening_amount = ?, current_amount = ?, opened_at = ?, reopened_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+		['open', estado, openingAmount, openingAmount, openTime, reopenedTime, id]
 	);
 }
 
@@ -81,14 +89,35 @@ export async function closeCashBox(
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
 		console.log('Modo desarrollo: simulando cierre de caja');
-		updateMockCashBoxStatus(id, 'closed');
+		updateMockCashBoxStatus(id, 'closed', 0, undefined, 'cerrado');
 		return { success: true };
 	}
 	
 	return await executeMutation(
 		db,
-		'UPDATE cash_boxes SET status = ?, closed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-		['closed', id]
+		'UPDATE cash_boxes SET status = ?, estado = ?, closed_at = CURRENT_TIMESTAMP, reopened_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+		['closed', 'cerrado', id]
+	);
+}
+
+export async function reopenCashBox(
+	platform: App.Platform,
+	id: string,
+	reopenedAt: string
+): Promise<{ success: boolean; error?: string }> {
+	const db = getD1Database(platform);
+	
+	// Si no hay base de datos (desarrollo local), simular éxito
+	if (!db) {
+		console.log('Modo desarrollo: simulando reapertura de caja');
+		updateMockCashBoxStatus(id, 'open', 0, reopenedAt, 'reaperturado');
+		return { success: true };
+	}
+	
+	return await executeMutation(
+		db,
+		'UPDATE cash_boxes SET status = ?, estado = ?, reopened_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?',
+		['open', 'reaperturado', reopenedAt, id, 'closed']
 	);
 }
 

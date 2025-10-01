@@ -215,14 +215,17 @@
 	<title>Catálogos - Chambar</title>
 </svelte:head>
 
+<!-- Título principal -->
+<div class="mb-8">
+	<h1 class="text-3xl font-bold text-gray-900">Catálogos</h1>
+	<p class="mt-2 text-gray-600">Administra los catálogos del sistema</p>
+</div>
+
 <div class="max-w-7xl mx-auto">
-	<!-- Header -->
+	<!-- Header con botón -->
 	<div class="mb-8">
 		<div class="flex justify-between items-center">
-			<div>
-				<h1 class="text-3xl font-bold text-gray-900">Catálogos</h1>
-				<p class="mt-2 text-gray-600">Administra los catálogos del sistema</p>
-			</div>
+			<div></div>
 			<div class="flex space-x-2">
 				<button
 					onclick={() => showCreateForm = true}

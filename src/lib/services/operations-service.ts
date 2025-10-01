@@ -22,14 +22,27 @@ export interface CreateOperationData {
 	operationDetailId?: string;
 	responsiblePersonId?: string;
 	standId?: string;
+	createdAt?: string;
+	updatedAt?: string;
 }
 
-export async function getOperations(platform: App.Platform): Promise<Operation[]> {
+export async function getOperations(platform: App.Platform, date?: string): Promise<Operation[]> {
 	const db = getD1Database(platform);
 	
 	// Si no hay base de datos (desarrollo local), usar datos mock
 	if (!db) {
-		return mockOperations as Operation[];
+		let operations = mockOperations as Operation[];
+		
+		// Filtrar por fecha si se proporciona
+		if (date) {
+			const targetDate = new Date(date);
+			operations = operations.filter(op => {
+				const opDate = new Date(op.createdAt);
+				return opDate.toDateString() === targetDate.toDateString();
+			});
+		}
+		
+		return operations;
 	}
 	
 	return await executeQuery<Operation>(
@@ -47,7 +60,7 @@ export async function createOperation(
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
 		console.log('Modo desarrollo: simulando creación de operación');
-		const newOperation = addMockOperation(data);
+		const newOperation = addMockOperation(data, data.createdAt, data.updatedAt);
 		
 		// Actualizar monto de caja en modo desarrollo
 		await updateMockCashBoxAmount(data.cashBoxId, data.amount, data.type);

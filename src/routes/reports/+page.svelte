@@ -63,12 +63,13 @@
 	<title>Reportes - Chambar</title>
 </svelte:head>
 
+<!-- Título principal -->
+<div class="mb-8">
+	<h1 class="text-3xl font-bold text-gray-900">Reportes</h1>
+	<p class="mt-2 text-gray-600">Análisis y reportes del sistema de gestión de caja</p>
+</div>
+
 <div class="max-w-7xl mx-auto">
-	<!-- Header -->
-	<div class="mb-8">
-		<h1 class="text-3xl font-bold text-gray-900">Reportes</h1>
-		<p class="mt-2 text-gray-600">Análisis y reportes del sistema de gestión de caja</p>
-	</div>
 
 	<!-- Mensaje de error -->
 	{#if errorMessage}

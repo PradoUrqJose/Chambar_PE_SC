@@ -2,7 +2,6 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import '../app.css';
 	import Sidebar from '$lib/components/Sidebar.svelte';
-	import Header from '$lib/components/Header.svelte';
 	import type { LayoutData } from './$types';
 
 	let { children, data } = $props<{ children: any; data: LayoutData }>();
@@ -31,10 +30,7 @@
 			<Sidebar bind:isOpen={sidebarOpen} user={data.user} />
 			
 			<!-- Contenido principal -->
-			<div class="flex-1 flex flex-col overflow-hidden">
-				<!-- Header -->
-				<Header onToggleSidebar={toggleSidebar} />
-				
+			<div class="flex-1 flex flex-col overflow-hidden pl-8">
 				<!-- Área de contenido -->
 				<main class="flex-1 overflow-y-auto">
 					<div class="p-6">

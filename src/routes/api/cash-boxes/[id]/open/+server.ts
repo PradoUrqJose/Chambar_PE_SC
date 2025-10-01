@@ -5,9 +5,9 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async ({ params, request, platform }) => {
 	try {
 		const { id } = params;
-		const { openingAmount = 0 } = await request.json();
+		const { openingAmount = 0, openedAt } = await request.json();
 		
-		const result = await openCashBox(platform, id, openingAmount);
+		const result = await openCashBox(platform, id, openingAmount, openedAt);
 		
 		if (result.success) {
 			return json({ message: 'Caja abierta correctamente' });

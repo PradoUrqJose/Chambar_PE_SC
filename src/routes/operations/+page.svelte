@@ -220,24 +220,27 @@
 	<title>Operaciones - Chambar</title>
 </svelte:head>
 
+<!-- Título principal -->
+<div class="mb-8">
+	<h1 class="text-3xl font-bold text-gray-900">Operaciones</h1>
+	<p class="mt-2 text-gray-600">Gestiona ingresos y egresos del sistema</p>
+</div>
+
 <div class="max-w-7xl mx-auto">
-	<!-- Header -->
+	<!-- Header con botón -->
 	<div class="mb-8">
 		<div class="flex justify-between items-center">
 			<div>
-				<h1 class="text-3xl font-bold text-gray-900">Operaciones</h1>
-				<p class="mt-2 text-gray-600">Gestiona ingresos y egresos del sistema</p>
-				
 				<!-- Estado de caja -->
 				{#if openCashBox}
-					<div class="mt-2 flex items-center space-x-2">
+					<div class="flex items-center space-x-2">
 						<div class="w-3 h-3 bg-green-500 rounded-full"></div>
 						<span class="text-sm font-medium text-green-700">
 							Caja abierta: {openCashBox.name} - S/. {openCashBox.currentAmount.toFixed(2)}
 						</span>
 					</div>
 				{:else}
-					<div class="mt-2 flex items-center space-x-2">
+					<div class="flex items-center space-x-2">
 						<div class="w-3 h-3 bg-red-500 rounded-full"></div>
 						<span class="text-sm font-medium text-red-700">
 							No hay caja abierta - No se pueden crear operaciones
