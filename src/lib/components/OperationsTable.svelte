@@ -176,7 +176,7 @@
 	</div>
 
 	<!-- Paginación -->
-	{#if showPagination && operations.length > rowsPerPage}
+	{#if showPagination && totalPages > 1}
 		<Pagination
 			{currentPage}
 			totalPages={totalPages}

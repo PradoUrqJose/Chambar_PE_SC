@@ -163,13 +163,13 @@
 		try {
 			const dateStr = toPeruDateString(date);
 			console.log('🔍 loadOperationsForDate - Requesting operations for date:', dateStr);
-			const response = await fetch(`/api/operations?date=${dateStr}&limit=${rowsPerPage}`);
+			const response = await fetch(`/api/operations?date=${dateStr}`);
 			
 			if (response.ok) {
 				const data = await response.json();
 				operations = Array.isArray(data) ? data : (data.operations || []);
 				console.log('🔄 OPERACIONES CARGADAS:', {
-					total: operations.length,
+					total: data.total || operations.length,
 					operations: operations.map((op: any) => ({ id: op.id, description: op.description, amount: op.amount }))
 				});
 			} else {
