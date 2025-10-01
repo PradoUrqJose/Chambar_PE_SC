@@ -98,6 +98,9 @@
 				
 				<button
 					onclick={() => {
+						console.log('🔄 Agregando archivo de prueba...');
+						console.log('📊 Archivos actuales:', testAttachments.length);
+						
 						// Simular agregar más archivos
 						const newFile = {
 							id: Date.now().toString(),
@@ -107,7 +110,13 @@
 							fileSize: Math.floor(Math.random() * 500000) + 100000,
 							uploadedAt: new Date().toISOString()
 						};
+						
+						console.log('📁 Nuevo archivo:', newFile);
+						
+						// Actualizar el estado
 						testAttachments = [...testAttachments, newFile];
+						
+						console.log('✅ Archivo agregado. Total:', testAttachments.length);
 					}}
 					class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
 				>
@@ -116,11 +125,19 @@
 				
 				<button
 					onclick={() => {
-						testAttachments = testAttachments.slice(0, -1);
+						if (testAttachments.length > 0) {
+							console.log('🗑️ Eliminando último archivo...');
+							console.log('📊 Archivos antes:', testAttachments.length);
+							testAttachments = testAttachments.slice(0, -1);
+							console.log('✅ Archivo eliminado. Total:', testAttachments.length);
+						} else {
+							console.log('⚠️ No hay archivos para eliminar');
+						}
 					}}
-					class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+					class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+					disabled={testAttachments.length === 0}
 				>
-					Eliminar Último Archivo
+					Eliminar Último Archivo ({testAttachments.length})
 				</button>
 			</div>
 		</div>
@@ -129,12 +146,45 @@
 		<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
 			<h3 class="text-lg font-semibold text-blue-900 mb-2">ℹ️ Información de Prueba</h3>
 			<div class="text-sm text-blue-800 space-y-1">
-				<p><strong>Archivos de prueba:</strong> {testAttachments.length} imágenes aleatorias de Picsum</p>
+				<p><strong>Archivos de prueba:</strong> <span class="font-mono bg-blue-100 px-2 py-1 rounded">{testAttachments.length}</span> imágenes aleatorias de Picsum</p>
 				<p><strong>Lazy Loading:</strong> Las imágenes se cargan solo cuando son visibles</p>
 				<p><strong>Thumbnails:</strong> Se generan automáticamente con parámetros de desarrollo</p>
 				<p><strong>Compresión:</strong> Se aplica automáticamente a archivos grandes</p>
 				<p><strong>Cache:</strong> Se almacenan archivos frecuentemente accedidos</p>
 			</div>
+		</div>
+
+		<!-- Lista de Archivos Actuales -->
+		<div class="bg-white rounded-lg shadow p-6 mb-8">
+			<h3 class="text-lg font-semibold text-gray-900 mb-4">📁 Archivos Actuales ({testAttachments.length})</h3>
+			{#if testAttachments.length > 0}
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+					{#each testAttachments as attachment, index}
+						<div class="border border-gray-200 rounded-lg p-3 bg-gray-50">
+							<div class="flex items-center gap-2 mb-2">
+								<svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+								</svg>
+								<span class="text-sm font-medium text-gray-900">#{index + 1}</span>
+							</div>
+							<p class="text-sm text-gray-700 truncate" title={attachment.fileName}>
+								{attachment.fileName}
+							</p>
+							<p class="text-xs text-gray-500">
+								{Math.round(attachment.fileSize / 1024)} KB
+							</p>
+						</div>
+					{/each}
+				</div>
+			{:else}
+				<div class="text-center py-8 text-gray-500">
+					<svg class="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+					</svg>
+					<p>No hay archivos de prueba</p>
+					<p class="text-sm">Haz clic en "Agregar Archivo de Prueba" para comenzar</p>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Componente AttachmentsPreview con optimizaciones -->
