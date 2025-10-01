@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Operation } from '$lib/services/operations-service';
+	import AttachmentsPreview from './AttachmentsPreview.svelte';
 
 	interface Props {
 		operations: Operation[];
@@ -87,15 +88,18 @@
 					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
 						Fecha
 					</th>
-					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+					<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
 						Hora
+					</th>
+					<th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+						Archivos
 					</th>
 				</tr>
 			</thead>
 			<tbody class="bg-white divide-y divide-gray-200">
 				{#if operations.length === 0}
 					<tr>
-						<td colspan="5" class="px-4 py-8 text-center text-gray-500">
+						<td colspan="6" class="px-4 py-8 text-center text-gray-500">
 							No hay operaciones para mostrar
 						</td>
 					</tr>
@@ -127,17 +131,20 @@
 									{operation.type === 'income' ? '+' : '-'}S/. {operation.amount.toFixed(2)}
 								</div>
 							</td>
-							<td class="px-4 py-3 border-r border-gray-200">
-								<div class="text-sm text-gray-900">
-									{formatDatePeru(operation.createdAt)}
-								</div>
-							</td>
-							<td class="px-4 py-3">
-								<div class="text-sm text-gray-500">
-									{formatTimePeru(operation.createdAt)}
-								</div>
-							</td>
-						</tr>
+						<td class="px-4 py-3 border-r border-gray-200">
+							<div class="text-sm text-gray-900">
+								{formatDatePeru(operation.createdAt)}
+							</div>
+						</td>
+						<td class="px-4 py-3 border-r border-gray-200">
+							<div class="text-sm text-gray-500">
+								{formatTimePeru(operation.createdAt)}
+							</div>
+						</td>
+						<td class="px-4 py-3 text-center">
+							<AttachmentsPreview attachments={operation.attachments || []} />
+						</td>
+					</tr>
 					{/each}
 				{/if}
 			</tbody>
