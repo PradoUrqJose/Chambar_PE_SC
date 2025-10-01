@@ -295,43 +295,21 @@
 			
 			console.log('📋 Cajas cerradas anteriores:', closedBoxesWithPending);
 			
-			// Si hay cajas cerradas, calcular su saldo final
 			if (closedBoxesWithPending.length > 0) {
-				// Ordenar por fecha (más reciente primero)
 				const sortedBoxes = closedBoxesWithPending.sort((a, b) => 
 					new Date(b.businessDate).getTime() - new Date(a.businessDate).getTime()
 				);
 				
 				const latestClosedBox = sortedBoxes[0];
+				console.log('🧮 Caja cerrada más reciente:', latestClosedBox);
 				
-				// Obtener operaciones de esa caja para calcular saldo
-				const opsResponse = await fetch(`/api/operations?date=${latestClosedBox.businessDate}`);
-				if (opsResponse.ok) {
-					const opsData = await opsResponse.json();
-					const finalBalance = opsData.operations.reduce((sum: number, op: any) => {
-						return op.cashBoxId === latestClosedBox.id
-							? (op.type === 'income' ? sum + op.amount : sum - op.amount)
-							: sum;
-					}, 0);
-					
-					console.log(`💰 Saldo final de ${latestClosedBox.name}: ${finalBalance}`);
-					
-					if (finalBalance > 0) {
-						// Crear pendingBalance
-						const lastPendingBalance = {
-							id: `pending-${latestClosedBox.id}`,
-							cashBoxId: latestClosedBox.id,
-							amount: finalBalance,
-							date: latestClosedBox.businessDate,
-							status: 'pending' as const,
-							notes: `Saldo pendiente de ${latestClosedBox.name}`
-						};
-						
-						pendingBalance = lastPendingBalance;
-						showPendingBalanceModal = true;
-						console.log('⚠️ Mostrando modal de saldo pendiente');
-						return; // No abrir la caja hasta que se maneje el saldo pendiente
-					}
+				const pending = findLastPendingBalance(currentDateStr);
+				if (pending) {
+					console.log('✅ Saldo pendiente detectado desde store:', pending);
+					pendingBalance = pending;
+					showPendingBalanceModal = true;
+					console.log('⚠️ Mostrando modal de saldo pendiente');
+					return;
 				}
 			}
 
@@ -611,16 +589,31 @@
 				console.log('💸 Transfiriendo saldo pendiente a caja:', actualCashBoxId);
 				
 				// Transferir saldo pendiente a la caja actual
-				transferPendingBalanceToCurrentBox(pendingBalanceId, actualCashBoxId);
-				console.log('✅ Transferencia completada');
+				const transferResult = transferPendingBalanceToCurrentBox(pendingBalanceId, actualCashBoxId);
+				if (!transferResult?.success) {
+					console.error('❌ Error al transferir saldo pendiente:', transferResult?.error);
+					errorMessage = 'Error al transferir saldo pendiente';
+					return;
+				}
+				console.log('✅ Transferencia completada:', transferResult);
 				
 				// Abrir la caja
 				await openCashBoxDirectly(actualCashBoxId);
 			} else if (action === 'return') {
-				markPendingBalanceAsHandled(pendingBalanceId, 'returned', notes);
+				const result = markPendingBalanceAsHandled(pendingBalanceId, 'returned', notes);
+				if (!result.success) {
+					console.error('❌ Error al marcar saldo como devuelto:', result.error);
+					errorMessage = 'Error al manejar el saldo pendiente';
+					return;
+				}
 				await openCashBoxDirectly(actualCashBoxId);
 			} else if (action === 'handle') {
-				markPendingBalanceAsHandled(pendingBalanceId, 'handled', notes);
+				const result = markPendingBalanceAsHandled(pendingBalanceId, 'handled', notes);
+				if (!result.success) {
+					console.error('❌ Error al marcar saldo como manejado:', result.error);
+					errorMessage = 'Error al manejar el saldo pendiente';
+					return;
+				}
 				await openCashBoxDirectly(actualCashBoxId);
 			}
 

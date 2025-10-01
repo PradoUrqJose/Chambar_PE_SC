@@ -142,10 +142,19 @@ export function updateMockCashBoxStatus(id: string, status: 'empty' | 'open' | '
 		if (finalBalance > 0) {
 			cashBox.pendingBalance = finalBalance;
 			cashBox.pendingBalanceTransferred = false;
+			upsertPendingBalance({
+				id: `pending-${cashBox.id}`,
+				cashBoxId: cashBox.id,
+				amount: finalBalance,
+				date: cashBox.businessDate,
+				status: 'pending',
+				notes: `Saldo pendiente de ${cashBox.name}`
+			});
 			console.log(`   ⚠️ SALDO PENDIENTE: ${finalBalance} soles (no transferido)`);
 		} else {
 			cashBox.pendingBalance = 0;
 			cashBox.pendingBalanceTransferred = true;
+			removePendingBalance(cashBox.id);
 			console.log(`   ✅ Sin saldo pendiente`);
 		}
 		
@@ -216,6 +225,24 @@ export function computeCurrentAmount(cashBoxId: string): number {
 	return total;
 }
 
+export function upsertPendingBalance(pending: PendingBalance) {
+	const existing = mockPendingBalances.find(pb => pb.id === pending.id || pb.cashBoxId === pending.cashBoxId);
+	if (existing) {
+		Object.assign(existing, pending);
+	} else {
+		mockPendingBalances.push(pending);
+	}
+	console.log('🗂️ Pending balance actualizado/creado:', pending);
+}
+
+export function removePendingBalance(cashBoxId: string) {
+	const index = mockPendingBalances.findIndex(pb => pb.cashBoxId === cashBoxId);
+	if (index !== -1) {
+		const removed = mockPendingBalances.splice(index, 1)[0];
+		console.log('🗂️ Pending balance eliminado:', removed);
+	}
+}
+
 // ============================================================================
 // FUNCIONES DE SALDO PENDIENTE
 // ============================================================================
@@ -223,56 +250,18 @@ export function computeCurrentAmount(cashBoxId: string): number {
 // Función para buscar la última caja con saldo pendiente
 export function findLastPendingBalance(currentDate: string): PendingBalance | null {
 	console.log(`🔍 Buscando saldos pendientes para fecha: ${currentDate}`);
-	console.log(`📦 Total de cajas en el sistema: ${mockCashBoxes.length}`);
-	
-	// Buscar cajas cerradas con saldo pendiente no transferido
-	const closedBoxes = mockCashBoxes.filter(cb => {
-		const isClosed = cb.status === 'closed';
-		const hasPendingBalance = cb.pendingBalance > 0;
-		const notTransferred = cb.pendingBalanceTransferred === false;
-		const isBeforeCurrentDate = cb.businessDate < currentDate;
-		
-		console.log(`   Caja ${cb.name} (${cb.businessDate}):`, {
-			isClosed,
-			hasPendingBalance: `${cb.pendingBalance} soles`,
-			notTransferred,
-			isBeforeCurrentDate
-		});
-		
-		return isClosed && hasPendingBalance && notTransferred && isBeforeCurrentDate;
-	});
-	
-	console.log(`📋 Cajas cerradas con saldo pendiente: ${closedBoxes.length}`);
-	
-	// Ordenar por fecha descendente (más reciente primero)
-	const sortedByDate = closedBoxes.sort((a, b) => 
-		new Date(b.businessDate).getTime() - new Date(a.businessDate).getTime()
-	);
-	
-	// Retornar la más reciente
-	if (sortedByDate.length > 0) {
-		const cashBox = sortedByDate[0];
-		
-		// Crear o actualizar el saldo pendiente
-		let existingPending = mockPendingBalances.find(pb => pb.cashBoxId === cashBox.id);
-		if (!existingPending) {
-			existingPending = {
-				id: `pending-${cashBox.id}`,
-				cashBoxId: cashBox.id,
-				amount: cashBox.pendingBalance,
-				date: cashBox.businessDate,
-				status: 'pending',
-				notes: `Saldo pendiente de ${cashBox.name}`
-			};
-			mockPendingBalances.push(existingPending);
-		} else {
-			existingPending.amount = cashBox.pendingBalance;
-		}
-		
-		console.log(`✅ SALDO PENDIENTE ENCONTRADO: ${cashBox.pendingBalance} soles de ${cashBox.name} (${cashBox.businessDate})`);
-		return existingPending;
+	console.log(`📊 mockPendingBalances actuales:`, mockPendingBalances);
+
+	const availablePendings = mockPendingBalances
+		.filter(pb => pb.status === 'pending' && pb.date < currentDate)
+		.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+	if (availablePendings.length > 0) {
+		const pending = availablePendings[0];
+		console.log(`✅ SALDO PENDIENTE ENCONTRADO: ${pending.amount} soles (caja ${pending.cashBoxId})`);
+		return pending;
 	}
-	
+
 	console.log(`❌ No hay saldos pendientes anteriores a ${currentDate}`);
 	return null;
 }
@@ -284,33 +273,50 @@ export function validatePendingBalance(pendingBalance: PendingBalance, currentDa
 	return pending < current;
 }
 
-export function markPendingBalanceAsHandled(pendingBalanceId: string, action: 'transferred' | 'returned' | 'handled', notes?: string) {
+export function markPendingBalanceAsHandled(
+	pendingBalanceId: string,
+	action: 'transferred' | 'returned' | 'handled',
+	notes?: string
+): { success: boolean; error?: string } {
 	const pendingBalance = mockPendingBalances.find(pb => pb.id === pendingBalanceId);
-	if (pendingBalance) {
-		pendingBalance.status = action === 'transferred' ? 'transferred' : action === 'returned' ? 'returned' : 'handled';
-		pendingBalance.handledAt = new Date().toISOString();
-		if (notes) {
-			pendingBalance.notes = notes;
-		}
-		
-		// Marcar la caja original como transferida
-		const cashBox = mockCashBoxes.find(cb => cb.id === pendingBalance.cashBoxId);
-		if (cashBox) {
-			cashBox.pendingBalanceTransferred = true;
-			console.log(`✅ Saldo pendiente marcado como ${action} para ${cashBox.name}`);
-		}
+	if (!pendingBalance) {
+		const error = `Pending balance ${pendingBalanceId} not found`;
+		console.error('❌', error);
+		return { success: false, error };
 	}
+
+	pendingBalance.status = action === 'transferred' ? 'transferred' : action === 'returned' ? 'returned' : 'handled';
+	pendingBalance.handledAt = new Date().toISOString();
+	if (notes) {
+		pendingBalance.notes = notes;
+	}
+
+	const cashBox = mockCashBoxes.find(cb => cb.id === pendingBalance.cashBoxId);
+	if (cashBox) {
+		cashBox.pendingBalanceTransferred = true;
+		if (action !== 'transferred') {
+			cashBox.pendingBalance = 0;
+		}
+		console.log(`✅ Saldo pendiente marcado como ${action} para ${cashBox.name}`);
+	}
+
+	console.log('🗂️ Estado actualizado para pendingBalance:', pendingBalance);
+	return { success: true };
 }
 
-export function transferPendingBalanceToCurrentBox(pendingBalanceId: string, currentCashBoxId: string) {	
+export function transferPendingBalanceToCurrentBox(
+	pendingBalanceId: string,
+	currentCashBoxId: string
+): { success: boolean; amount?: number; originalCashBoxId?: string; currentCashBoxId?: string; error?: string } {	
 	console.log('🔄 transferPendingBalanceToCurrentBox - START');
 	console.log('   pendingBalanceId:', pendingBalanceId);
 	console.log('   currentCashBoxId:', currentCashBoxId);
 	
 	const pendingBalance = mockPendingBalances.find(pb => pb.id === pendingBalanceId);
 	if (!pendingBalance) {
-		console.error('❌ Pending balance not found:', pendingBalanceId);
-		return;
+		const error = `Pending balance ${pendingBalanceId} not found`;
+		console.error('❌', error);
+		return { success: false, error };
 	}
 	console.log('✅ Pending balance found:', pendingBalance);
 
@@ -318,12 +324,14 @@ export function transferPendingBalanceToCurrentBox(pendingBalanceId: string, cur
 	const currentCashBox = mockCashBoxes.find(cb => cb.id === currentCashBoxId);
 	
 	if (!originalCashBox) {
-		console.error('❌ Original cash box not found:', pendingBalance.cashBoxId);
-		return;
+		const error = `Original cash box ${pendingBalance.cashBoxId} not found`;
+		console.error('❌', error);
+		return { success: false, error };
 	}
 	if (!currentCashBox) {
-		console.error('❌ Current cash box not found:', currentCashBoxId);
-		return;
+		const error = `Current cash box ${currentCashBoxId} not found`;
+		console.error('❌', error);
+		return { success: false, error };
 	}
 	
 	console.log('✅ Original cash box:', originalCashBox);
@@ -389,6 +397,12 @@ export function transferPendingBalanceToCurrentBox(pendingBalanceId: string, cur
 	
 	console.log(`✅ Transferencia bidireccional completada: ${pendingBalance.amount} soles de ${originalCashBox.name} → ${currentCashBox.name}`);
 	console.log('🔄 transferPendingBalanceToCurrentBox - END');
+	return {
+		success: true,
+		amount: pendingBalance.amount,
+		originalCashBoxId: originalCashBox.id,
+		currentCashBoxId: currentCashBox.id
+	};
 }
 
 export function debugPendingBalanceData() {
