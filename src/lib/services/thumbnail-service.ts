@@ -1,4 +1,5 @@
 import type { R2Bucket } from '@cloudflare/workers-types';
+import { getConfig } from '$lib/config/development';
 
 export interface ThumbnailOptions {
 	width?: number;
@@ -23,16 +24,22 @@ export async function generateThumbnail(
 	imageUrl: string,
 	options: ThumbnailOptions = {}
 ): Promise<ThumbnailResult> {
+	const config = getConfig(platform);
 	const {
-		width = 300,
-		height = 200,
-		quality = 80,
-		format = 'webp'
+		width = config.THUMBNAIL_WIDTH,
+		height = config.THUMBNAIL_HEIGHT,
+		quality = config.THUMBNAIL_QUALITY,
+		format = config.THUMBNAIL_FORMAT
 	} = options;
 
 	// En desarrollo, simular thumbnail
 	if (!platform?.env?.ATTACHMENTS) {
-		console.log('🖼️ Simulando generación de thumbnail para:', imageUrl);
+		if (config.LOG_THUMBNAIL_GENERATION) {
+			console.log('🖼️ [DEV] Simulando generación de thumbnail para:', imageUrl);
+			console.log('📐 [DEV] Dimensiones:', `${width}x${height}`);
+			console.log('🎨 [DEV] Calidad:', `${quality}%`);
+			console.log('📄 [DEV] Formato:', format.toUpperCase());
+		}
 		
 		// Simular delay de procesamiento
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -44,6 +51,7 @@ export async function generateThumbnail(
 		url.searchParams.set('q', quality.toString());
 		url.searchParams.set('f', format);
 		url.searchParams.set('thumbnail', 'true');
+		url.searchParams.set('dev', 'true');
 		
 		return {
 			success: true,

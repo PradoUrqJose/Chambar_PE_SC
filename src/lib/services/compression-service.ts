@@ -1,3 +1,5 @@
+import { getConfig } from '$lib/config/development';
+
 export interface CompressionOptions {
 	maxWidth?: number;
 	maxHeight?: number;
@@ -20,13 +22,15 @@ export interface CompressionResult {
  */
 export async function compressImage(
 	file: File,
-	options: CompressionOptions = {}
+	options: CompressionOptions = {},
+	platform?: App.Platform
 ): Promise<CompressionResult> {
+	const config = getConfig(platform);
 	const {
-		maxWidth = 1920,
-		maxHeight = 1080,
-		quality = 0.8,
-		maxSizeKB = 500,
+		maxWidth = config.COMPRESSION_MAX_WIDTH,
+		maxHeight = config.COMPRESSION_MAX_HEIGHT,
+		quality = config.COMPRESSION_QUALITY,
+		maxSizeKB = config.COMPRESSION_MAX_SIZE_KB,
 		format = 'webp'
 	} = options;
 
@@ -41,9 +45,23 @@ export async function compressImage(
 		};
 	}
 
+	// Si la compresión está deshabilitada, no comprimir
+	if (!config.COMPRESSION_ENABLED) {
+		return {
+			success: true,
+			compressedFile: file,
+			originalSize: file.size,
+			compressedSize: file.size,
+			compressionRatio: 1
+		};
+	}
+
 	// Si el archivo ya es pequeño, no comprimir
 	const maxSizeBytes = maxSizeKB * 1024;
 	if (file.size <= maxSizeBytes) {
+		if (config.LOG_COMPRESSION_STATS) {
+			console.log('📦 [DEV] Archivo ya es pequeño, no comprimir:', file.name, formatFileSize(file.size));
+		}
 		return {
 			success: true,
 			compressedFile: file,
@@ -103,6 +121,13 @@ export async function compressImage(
 		URL.revokeObjectURL(img.src);
 
 		const compressionRatio = compressedFile.size / file.size;
+
+		if (config.LOG_COMPRESSION_STATS) {
+			console.log('🗜️ [DEV] Compresión completada:', file.name);
+			console.log('📊 [DEV] Original:', formatFileSize(file.size));
+			console.log('📊 [DEV] Comprimido:', formatFileSize(compressedFile.size));
+			console.log('📊 [DEV] Reducción:', `${Math.round((1 - compressionRatio) * 100)}%`);
+		}
 
 		return {
 			success: true,

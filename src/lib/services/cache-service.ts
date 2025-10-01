@@ -13,14 +13,22 @@ export interface CacheStats {
 	missRate: number;
 }
 
+import { getConfig } from '$lib/config/development';
+
 class AttachmentCache {
 	private cache = new Map<string, CacheItem>();
-	private maxSize = 50 * 1024 * 1024; // 50MB máximo
-	private maxAge = 24 * 60 * 60 * 1000; // 24 horas
+	private maxSize: number;
+	private maxAge: number;
 	private stats = {
 		hits: 0,
 		misses: 0
 	};
+
+	constructor(platform?: App.Platform) {
+		const config = getConfig(platform);
+		this.maxSize = config.CACHE_MAX_SIZE;
+		this.maxAge = config.CACHE_MAX_AGE;
+	}
 
 	/**
 	 * Obtiene un archivo del cache
