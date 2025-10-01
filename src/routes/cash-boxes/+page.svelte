@@ -13,12 +13,12 @@
 	import type { CashBox } from '$lib/services/cash-boxes-service';
 	import type { Operation } from '$lib/services/operations-service';
 	import { 
+		getCashBoxByDate,
 		findLastPendingBalance, 
 		validatePendingBalance, 
 		markPendingBalanceAsHandled, 
 		transferPendingBalanceToCurrentBox,
-		debugPendingBalanceData,
-		mockCashBoxes
+		debugPendingBalanceData
 	} from '$lib/db/mock-data';
 
 	let { data } = $props<{ data: PageData }>();
@@ -89,58 +89,12 @@
 		return total;
 	}
 
-	// Función para obtener caja para la fecha actual (sin crear)
-	function getCashBoxForDate(date: Date): CashBox | null {
-		const targetDate = toPeruDateString(date);
-		
-		// Buscar caja existente para esa fecha específica
+	// Caja para la fecha actual (derivado del estado)
+	let cashBoxForDate = $derived((() => {
+		const targetDate = toPeruDateString(currentDate);
+		// Buscar en las cajas cargadas
 		return cashBoxes.find(cb => cb.businessDate === targetDate) || null;
-	}
-
-	// Función para asegurar que existe una caja para la fecha actual
-	async function ensureCashBoxForDate(date: Date): Promise<CashBox> {
-		const targetDate = toPeruDateString(date);
-		
-		// Buscar caja existente
-		let found = cashBoxes.find(cb => cb.businessDate === targetDate);
-		
-		// Si no existe, crear una nueva
-		if (!found) {
-			const newCashBox = createCashBoxForDate(targetDate);
-			
-			// Agregar a mockCashBoxes para persistencia
-			mockCashBoxes.unshift(newCashBox);
-			
-			// Recargar cajas desde la API
-			await loadCashBoxes();
-			
-			// Buscar la caja recién creada
-			found = cashBoxes.find(cb => cb.businessDate === targetDate);
-		}
-		
-		return found!;
-	}
-
-	// Función para crear una nueva caja para una fecha específica
-	function createCashBoxForDate(businessDate: string): any {
-		const newId = `cashbox-${businessDate}-${Date.now()}`;
-		const newCashBox = {
-			id: newId,
-			name: `Caja ${businessDate}`,
-			status: 'empty',
-			openingAmount: 0,
-			pendingBalance: 0,
-			pendingBalanceHandled: true,
-			openedAt: null,
-			originalOpenedAt: null,
-			closedAt: null,
-			reopenedAt: null,
-			businessDate: businessDate,
-			createdAt: new Date().toISOString(),
-			updatedAt: new Date().toISOString()
-		};
-		return newCashBox;
-	}
+	})());
 
 	// Helper para convertir fecha a string en zona horaria de Perú (YYYY-MM-DD)
 	function toPeruDateString(date: Date): string {
@@ -180,7 +134,6 @@
 
 	// Función para actualizar caja abierta actual
 	function updateCurrentOpenCashBox() {
-		const cashBoxForDate = getCashBoxForDate(currentDate);
 		currentOpenCashBox = cashBoxForDate;
 	}
 
@@ -215,12 +168,18 @@
 	// Función para cargar cajas
 	async function loadCashBoxes() {
 		try {
+			// Asegurar que existe la caja para la fecha actual
+			const targetDate = toPeruDateString(currentDate);
+			getCashBoxByDate(targetDate);
+			
+			// Cargar desde la API
 			const response = await fetch('/api/cash-boxes');
 			
 			if (response.ok) {
 				const data = await response.json();
 				cashBoxes = data;
 				updateCurrentOpenCashBox();
+				console.log(`📦 Cajas cargadas: ${cashBoxes.length} | Caja para ${targetDate}:`, cashBoxForDate);
 			} else {
 				console.error('❌ Error loading cash boxes:', response.statusText);
 			}
@@ -291,11 +250,12 @@
 	// Función para abrir caja
 	async function openCashBox() {
 		if (openingAmount < 0) return;
+		if (!cashBoxForDate) {
+			errorMessage = 'Error: No se encontró la caja para la fecha actual';
+			return;
+		}
 
 		try {
-			// Asegurar que existe una caja para la fecha actual
-			const cashBoxForDate = await ensureCashBoxForDate(currentDate);
-
 			// Verificar si hay saldo pendiente antes de abrir
 			const currentDateStr = toPeruDateString(currentDate);
 			const lastPendingBalance = findLastPendingBalance(currentDateStr);
@@ -318,10 +278,9 @@
 	// Función para abrir caja directamente (sin verificar saldos pendientes)
 	async function openCashBoxDirectly(cashBoxId: string) {
 		try {
-			// Obtener el openingAmount actualizado directamente de mockCashBoxes
-			const mockCashBox = mockCashBoxes.find(cb => cb.id === cashBoxId);
+			// Obtener el openingAmount actual
 			const currentCashBox = cashBoxes.find(cb => cb.id === cashBoxId);
-			const actualOpeningAmount = mockCashBox?.openingAmount || currentCashBox?.openingAmount || openingAmount;
+			const actualOpeningAmount = currentCashBox?.openingAmount || openingAmount;
 			
 			const response = await fetch(`/api/cash-boxes/${cashBoxId}/open`, {
 				method: 'POST',
@@ -399,7 +358,6 @@
 	// Función para crear operación
 	async function createOperation(operationData: any) {
 		try {
-			const cashBoxForDate = getCashBoxForDate(currentDate);
 			if (!cashBoxForDate) {
 				errorMessage = 'No hay caja abierta para esta fecha';
 				return;
@@ -467,9 +425,6 @@
 		}
 	});
 
-	// Obtener caja para la fecha actual
-	let cashBoxForDate = $derived(getCashBoxForDate(currentDate));
-	
 	// operations ya es un Operation[] directamente
 	
 	// Variable para el monto actual de la caja
@@ -488,61 +443,22 @@
 		await updateCurrentAmount();
 	}
 
-	// Función para transferir saldo pendiente creando operación real
-	async function transferPendingBalanceWithOperation(pendingBalanceId: string, currentCashBoxId: string) {
-		try {
-			// Obtener el saldo pendiente
-			const pendingBalance = findLastPendingBalance(toPeruDateString(currentDate));
-			if (!pendingBalance) {
-				throw new Error('Saldo pendiente no encontrado');
-			}
-
-			// Crear operación de transferencia en el backend
-			const transferOperation = {
-				type: 'income' as const,
-				amount: pendingBalance.amount,
-				description: `Transferencia de saldo pendiente desde caja ${pendingBalance.cashBoxId}`,
-				cashBoxId: currentCashBoxId,
-				createdAt: new Date().toISOString(),
-				updatedAt: new Date().toISOString()
-			};
-
-			console.log('💰 Creating transfer operation:', transferOperation);
-
-			const response = await fetch('/api/operations', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(transferOperation)
-			});
-
-			if (!response.ok) {
-				throw new Error('Error al crear operación de transferencia');
-			}
-
-			// Marcar el saldo pendiente como manejado
-			markPendingBalanceAsHandled(pendingBalanceId, 'transferred', 'Saldo transferido a caja actual');
-
-			console.log('✅ Transfer operation created successfully');
-		} catch (error) {
-			console.error('❌ Error transferring pending balance:', error);
-			throw error;
-		}
-	}
-
 	// Función para manejar la confirmación del saldo pendiente
 	async function handlePendingBalanceConfirm(event: any) {
 		const { action, notes, pendingBalanceId } = event;
 		
-		try {
-			// Asegurar que existe una caja para la fecha actual
-			const cashBoxForDate = await ensureCashBoxForDate(currentDate);
+		if (!cashBoxForDate) {
+			errorMessage = 'Error: No se encontró la caja para la fecha actual';
+			return;
+		}
 
+		try {
 			if (action === 'transfer') {
-				// Primero abrir la caja, luego crear la operación
-				await openCashBoxDirectly(cashBoxForDate.id);
+				// Transferir saldo pendiente a la caja actual
+				transferPendingBalanceToCurrentBox(pendingBalanceId, cashBoxForDate.id);
 				
-				// Ahora crear la operación de transferencia
-				await transferPendingBalanceWithOperation(pendingBalanceId, cashBoxForDate.id);
+				// Abrir la caja
+				await openCashBoxDirectly(cashBoxForDate.id);
 			} else if (action === 'return') {
 				markPendingBalanceAsHandled(pendingBalanceId, 'returned', notes);
 				await openCashBoxDirectly(cashBoxForDate.id);
