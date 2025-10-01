@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 
 // Mock data para empresas (en un proyecto real esto vendría de una base de datos)
 let mockCompanies = [
-	{ id: '1', razonSocial: 'Empresa Demo S.A.C.', ruc: '20123456789', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+	{ id: 'company-1', razonSocial: 'Empresa Demo S.A.C.', ruc: '20123456789', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 ];
 
 export const PUT: RequestHandler = async ({ params, request }) => {

@@ -268,7 +268,7 @@
 							</td>
 						</tr>
 					{:else}
-						{#each paginatedItems as item (item.id)}
+						{#each paginatedItems as item, index (item.id || `item-${index}`)}
 							<tr class="hover:bg-gray-50">
 								{#each columns as column}
 									<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

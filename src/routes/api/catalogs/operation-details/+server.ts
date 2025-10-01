@@ -3,9 +3,14 @@ import type { RequestHandler } from './$types';
 
 // Mock data para detalles de operación
 let mockOperationDetails = [
-	{ id: '1', name: 'Venta', type: 'income', category: 'Ventas', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-	{ id: '2', name: 'Compra', type: 'expense', category: 'Compras', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+	{ id: 'detail-1', name: 'Venta', type: 'income', category: 'Ventas', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+	{ id: 'detail-2', name: 'Compra', type: 'expense', category: 'Compras', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 ];
+
+// Función para generar ID único
+function generateUniqueId() {
+	return 'detail-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+}
 
 export const GET: RequestHandler = async () => {
 	return json(mockOperationDetails);
@@ -16,7 +21,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const data = await request.json();
 		
 		const newDetail = {
-			id: 'detail-' + Date.now(),
+			id: generateUniqueId(),
 			name: data.name,
 			type: data.type,
 			category: data.category,

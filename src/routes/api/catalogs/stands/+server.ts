@@ -3,9 +3,14 @@ import type { RequestHandler } from './$types';
 
 // Mock data para stands
 let mockStands = [
-	{ id: '1', name: 'Stand A', location: 'Zona Norte', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-	{ id: '2', name: 'Stand B', location: 'Zona Sur', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+	{ id: 'stand-1', name: 'Stand A', location: 'Zona Norte', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+	{ id: 'stand-2', name: 'Stand B', location: 'Zona Sur', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 ];
+
+// Función para generar ID único
+function generateUniqueId() {
+	return 'stand-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+}
 
 export const GET: RequestHandler = async () => {
 	return json(mockStands);
@@ -16,7 +21,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const data = await request.json();
 		
 		const newStand = {
-			id: 'stand-' + Date.now(),
+			id: generateUniqueId(),
 			name: data.name,
 			location: data.location,
 			status: data.status || 'active',

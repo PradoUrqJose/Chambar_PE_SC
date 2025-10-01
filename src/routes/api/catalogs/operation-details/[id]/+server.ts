@@ -3,8 +3,8 @@ import type { RequestHandler } from './$types';
 
 // Mock data para detalles de operación
 let mockOperationDetails = [
-	{ id: '1', name: 'Venta', type: 'income', category: 'Ventas', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-	{ id: '2', name: 'Compra', type: 'expense', category: 'Compras', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+	{ id: 'detail-1', name: 'Venta', type: 'income', category: 'Ventas', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+	{ id: 'detail-2', name: 'Compra', type: 'expense', category: 'Compras', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 ];
 
 export const PUT: RequestHandler = async ({ params, request }) => {

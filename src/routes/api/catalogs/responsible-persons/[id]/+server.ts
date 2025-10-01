@@ -3,8 +3,8 @@ import type { RequestHandler } from './$types';
 
 // Mock data para responsables
 let mockResponsiblePersons = [
-	{ id: '1', name: 'Juan Pérez', email: 'juan@example.com', phone: '999888777', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-	{ id: '2', name: 'María García', email: 'maria@example.com', phone: '999888666', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+	{ id: 'person-1', name: 'Juan Pérez', email: 'juan@example.com', phone: '999888777', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+	{ id: 'person-2', name: 'María García', email: 'maria@example.com', phone: '999888666', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 ];
 
 export const PUT: RequestHandler = async ({ params, request }) => {
