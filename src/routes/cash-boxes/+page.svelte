@@ -89,31 +89,48 @@
 		return total;
 	}
 
-	// Función para obtener o crear caja para la fecha actual
+	// Función para obtener caja para la fecha actual (sin crear)
 	function getCashBoxForDate(date: Date): CashBox | null {
 		const targetDate = toPeruDateString(date);
 		
-		// 1. Buscar caja existente para esa fecha específica
+		// Buscar caja existente para esa fecha específica
+		return cashBoxes.find(cb => cb.businessDate === targetDate) || null;
+	}
+
+	// Función para asegurar que existe una caja para la fecha actual
+	async function ensureCashBoxForDate(date: Date): Promise<CashBox> {
+		const targetDate = toPeruDateString(date);
+		
+		// Buscar caja existente
 		let found = cashBoxes.find(cb => cb.businessDate === targetDate);
 		
-		// 2. Si no existe, crear una nueva caja vacía para esa fecha
+		// Si no existe, crear una nueva
 		if (!found) {
 			const newCashBox = createCashBoxForDate(targetDate);
-			cashBoxes.unshift(newCashBox); // Agregar al inicio
-			found = newCashBox;
+			
+			// Agregar a mockCashBoxes para persistencia
+			mockCashBoxes.unshift(newCashBox);
+			
+			// Recargar cajas desde la API
+			await loadCashBoxes();
+			
+			// Buscar la caja recién creada
+			found = cashBoxes.find(cb => cb.businessDate === targetDate);
 		}
 		
-		return found;
+		return found!;
 	}
 
 	// Función para crear una nueva caja para una fecha específica
-	function createCashBoxForDate(businessDate: string): CashBox {
+	function createCashBoxForDate(businessDate: string): any {
 		const newId = `cashbox-${businessDate}-${Date.now()}`;
-		const newCashBox: CashBox = {
+		const newCashBox = {
 			id: newId,
 			name: `Caja ${businessDate}`,
 			status: 'empty',
 			openingAmount: 0,
+			pendingBalance: 0,
+			pendingBalanceHandled: true,
 			openedAt: null,
 			originalOpenedAt: null,
 			closedAt: null,
@@ -276,12 +293,8 @@
 		if (openingAmount < 0) return;
 
 		try {
-			// Obtener la caja para la fecha actual (se crea automáticamente si no existe)
-			const cashBoxForDate = getCashBoxForDate(currentDate);
-			if (!cashBoxForDate) {
-				errorMessage = 'Error: No se pudo obtener la caja para la fecha';
-				return;
-			}
+			// Asegurar que existe una caja para la fecha actual
+			const cashBoxForDate = await ensureCashBoxForDate(currentDate);
 
 			// Verificar si hay saldo pendiente antes de abrir
 			const currentDateStr = toPeruDateString(currentDate);
@@ -521,12 +534,8 @@
 		const { action, notes, pendingBalanceId } = event;
 		
 		try {
-			// Obtener la caja para la fecha actual
-			const cashBoxForDate = getCashBoxForDate(currentDate);
-			if (!cashBoxForDate) {
-				errorMessage = 'Error: No se pudo obtener la caja para la fecha';
-				return;
-			}
+			// Asegurar que existe una caja para la fecha actual
+			const cashBoxForDate = await ensureCashBoxForDate(currentDate);
 
 			if (action === 'transfer') {
 				// Primero abrir la caja, luego crear la operación
