@@ -302,6 +302,8 @@
 	async function createAndOpenCashBox() {
 		try {
 			const targetDate = toPeruDateString(currentDate);
+			console.log('📦 createAndOpenCashBox - targetDate:', targetDate);
+			console.log('📦 createAndOpenCashBox - openingAmount:', openingAmount);
 			
 			// Crear la caja en el backend
 			const createResponse = await fetch('/api/cash-boxes', {
@@ -313,17 +315,25 @@
 				})
 			});
 
+			console.log('📦 createAndOpenCashBox - createResponse status:', createResponse.status);
+
 			if (!createResponse.ok) {
 				errorMessage = 'Error al crear la caja';
+				console.error('❌ Error al crear caja:', await createResponse.text());
 				return;
 			}
 
 			const newCashBox = await createResponse.json();
+			console.log('✅ Caja creada:', newCashBox);
+			
+			// Recargar cajas para obtener la nueva
+			await loadCashBoxes();
 			
 			// Abrir la caja recién creada
+			console.log('📦 Abriendo caja con ID:', newCashBox.id);
 			await openCashBoxDirectly(newCashBox.id);
 		} catch (error) {
-			console.error('Error creating and opening cash box:', error);
+			console.error('💥 Error creating and opening cash box:', error);
 			errorMessage = 'Error al crear la caja';
 		}
 	}
@@ -331,9 +341,14 @@
 	// Función para abrir caja directamente (sin verificar saldos pendientes)
 	async function openCashBoxDirectly(cashBoxId: string) {
 		try {
+			console.log('🔓 openCashBoxDirectly - cashBoxId:', cashBoxId);
+			console.log('🔓 openCashBoxDirectly - openingAmount:', openingAmount);
+			
 			// Obtener el openingAmount actual
 			const currentCashBox = cashBoxes.find(cb => cb.id === cashBoxId);
 			const actualOpeningAmount = currentCashBox?.openingAmount || openingAmount;
+			
+			console.log('🔓 openCashBoxDirectly - actualOpeningAmount:', actualOpeningAmount);
 			
 			const response = await fetch(`/api/cash-boxes/${cashBoxId}/open`, {
 				method: 'POST',
@@ -344,8 +359,13 @@
 				})
 			});
 
+			console.log('🔓 openCashBoxDirectly - response status:', response.status);
+
 			if (response.ok) {
+				console.log('✅ Caja abierta exitosamente');
 				await loadCashBoxes();
+				await loadOperationsForDate(currentDate);
+				await updateCurrentAmount();
 				showOpenForm = false;
 				openingAmount = 0;
 			} else {
