@@ -19,6 +19,7 @@ export interface CashBox {
 
 export interface CreateCashBoxData {
 	name: string;
+	businessDate: string;
 }
 
 export async function getCashBoxes(platform: App.Platform): Promise<CashBox[]> {
@@ -59,15 +60,16 @@ export async function createCashBox(
 	
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
-		console.log('Modo desarrollo: simulando creación de caja');
-		const newCashBox = addMockCashBox(data.name);
+		console.log('📦 Modo desarrollo: creando caja mock', data);
+		const newCashBox = addMockCashBox(data.businessDate, data.name);
+		console.log('✅ Caja mock creada:', newCashBox);
 		return { success: true, id: newCashBox.id };
 	}
 	
 	return await executeMutation(
 		db,
-		'INSERT INTO cash_boxes (name) VALUES (?)',
-		[data.name]
+		'INSERT INTO cash_boxes (name, business_date) VALUES (?, ?)',
+		[data.name, data.businessDate]
 	);
 }
 
@@ -82,8 +84,8 @@ export async function openCashBox(
 	
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
-		console.log('Modo desarrollo: simulando apertura de caja');
-		updateMockCashBoxStatus(id, 'open', openingAmount, openedAt, estado);
+		console.log('📦 Modo desarrollo: abriendo caja', { id, openingAmount, estado });
+		updateMockCashBoxStatus(id, estado === 'reaperturado' ? 'reopened' : 'open', openingAmount, openedAt);
 		
 		// Crear operación de apertura de caja si hay monto inicial
 		if (openingAmount > 0) {
@@ -103,10 +105,11 @@ export async function openCashBox(
 					responsiblePersonId: null,
 					standId: null
 				});
-				console.log('💰 Opening operation created for amount:', openingAmount);
+				console.log('💰 Operación de apertura creada con monto:', openingAmount);
 			}
 		}
 		
+		console.log('✅ Caja abierta exitosamente');
 		return { success: true };
 	}
 	

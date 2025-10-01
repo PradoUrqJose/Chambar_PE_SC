@@ -15,15 +15,23 @@ export const GET: RequestHandler = async ({ platform }) => {
 export const POST: RequestHandler = async ({ request, platform }) => {
 	try {
 		const data = await request.json();
+		console.log('📦 API: Creando caja con data:', data);
+		
 		const result = await createCashBox(platform, data);
 		
-		if (result.success) {
-			return json({ message: 'Caja creada correctamente', id: result.id });
+		if (result.success && result.id) {
+			// Obtener la caja completa para retornarla
+			const cashBoxes = await getCashBoxes(platform);
+			const newCashBox = cashBoxes.find(cb => cb.id === result.id);
+			
+			console.log('✅ API: Caja creada:', newCashBox);
+			return json(newCashBox);
 		} else {
+			console.error('❌ API: Error al crear caja:', result.error);
 			return json({ error: result.error || 'Error al crear la caja' }, { status: 500 });
 		}
 	} catch (error) {
-		console.error('Error creating cash box:', error);
+		console.error('💥 API: Error creating cash box:', error);
 		return json({ error: 'Error al crear la caja' }, { status: 500 });
 	}
 };
