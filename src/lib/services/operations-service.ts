@@ -23,6 +23,8 @@ export interface CreateOperationData {
 	operationDetailId?: string;
 	responsiblePersonId?: string;
 	standId?: string;
+	reopenBatchId?: string;
+	isReopenOperation?: boolean;
 	createdAt?: string;
 	updatedAt?: string;
 }

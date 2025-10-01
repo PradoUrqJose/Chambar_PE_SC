@@ -1,15 +1,16 @@
 <script lang="ts">
 	import type { CashBox } from '$lib/services/cash-boxes-service';
 
-	interface Props {
-		cashBox: CashBox | null;
-		onOpen: (id: string) => void;
-		onClose: (id: string) => void;
-		onReopen: (cashBox: CashBox) => void;
-		onAddOperation: () => void;
-	}
+interface Props {
+	cashBox: CashBox | null;
+	onOpen: (id: string) => void;
+	onClose: (id: string) => void;
+	onReopen: (cashBox: CashBox) => void;
+	onUpdateBalance: (cashBox: CashBox) => void;
+	onAddOperation: () => void;
+}
 
-	let { cashBox, onOpen, onClose, onReopen, onAddOperation }: Props = $props();
+let { cashBox, onOpen, onClose, onReopen, onUpdateBalance, onAddOperation }: Props = $props();
 
 	// Función para determinar qué acciones mostrar
 	function getActions() {
@@ -37,11 +38,18 @@
 			case 'closed':
 				return [
 					{
-						id: 'reopen',
+						id: 'update-balance',
 						label: 'Actualizar Balance',
 						icon: 'refresh',
-						action: () => onReopen(cashBox),
+						action: () => onUpdateBalance(cashBox),
 						className: 'bg-blue-600 hover:bg-blue-700 text-white'
+					},
+					{
+						id: 'reopen',
+						label: 'Reabrir Caja',
+						icon: 'open',
+						action: () => onReopen(cashBox),
+						className: 'bg-yellow-500 hover:bg-yellow-600 text-white'
 					}
 				];
 			case 'empty':

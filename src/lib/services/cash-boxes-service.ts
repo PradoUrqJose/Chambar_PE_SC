@@ -22,6 +22,8 @@ export interface CashBox {
 	businessDate: string; // Business date en zona horaria de Perú (YYYY-MM-DD)
 	createdAt: string;
 	updatedAt: string;
+	reopenReason?: string;
+	reopenNotes?: string;
 }
 
 export interface CreateCashBoxData {
@@ -37,6 +39,12 @@ export interface PendingBalanceData {
 	status: 'pending' | 'transferred' | 'returned' | 'handled';
 	notes?: string;
 	handledAt?: string;
+}
+
+export interface ReopenCashBoxOptions {
+	resetCurrentAmount?: boolean;
+	reopenReason?: string;
+	allocationNote?: string;
 }
 
 export async function getCashBoxes(platform: App.Platform): Promise<CashBox[]> {
@@ -210,7 +218,8 @@ export async function closeCashBox(
 export async function reopenCashBox(
 	platform: App.Platform,
 	id: string,
-	reopenedAt: string
+	reopenedAt: string,
+	options: ReopenCashBoxOptions = {}
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
 	
@@ -218,6 +227,21 @@ export async function reopenCashBox(
 	if (!db) {
 		console.log('Modo desarrollo: simulando reapertura de caja');
 		updateMockCashBoxStatus(id, 'reopened', 0, reopenedAt);
+
+		const cashBox = mockCashBoxes.find(cb => cb.id === id);
+		if (cashBox) {
+			cashBox.reopenedAt = reopenedAt;
+			cashBox.updatedAt = new Date().toISOString();
+			if (options.resetCurrentAmount) {
+				cashBox.openingAmount = 0;
+			}
+			if (options.reopenReason) {
+				cashBox.reopenReason = options.reopenReason;
+			}
+			if (options.allocationNote) {
+				cashBox.reopenNotes = options.allocationNote;
+			}
+		}
 		return { success: true };
 	}
 	

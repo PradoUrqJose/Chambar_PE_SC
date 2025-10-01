@@ -15,6 +15,8 @@ export interface MockCashBox {
 	reopenedAt: string | null;               // Timestamp de reapertura
 	createdAt: string;
 	updatedAt: string;
+	reopenReason?: string;
+	reopenNotes?: string;
 }
 
 export interface PendingBalance {

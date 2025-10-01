@@ -35,6 +35,8 @@
 	let showOperationsModal = $state(false);
 	let showReopenConfirmation = $state(false);
 	let cashBoxToReopen = $state<CashBox | null>(null);
+	let reopenType = $state<'default' | 'update-balance'>('default');
+	let reopenNote = $state('');
 	let showPendingBalanceModal = $state(false);
 	let pendingBalance = $state<any>(null);
 	
@@ -468,13 +470,15 @@
 			}
 
 			if (cashBoxForDate.status !== 'open' && cashBoxForDate.status !== 'reopened') {
-				errorMessage = 'La caja no está abierta';
+				errorMessage = 'La caja debe estar abierta o reaperturada';
 				return;
 			}
 
 			const finalOperationData = {
 				...operationData,
 				cashBoxId: cashBoxForDate.id,
+				reopenBatchId: cashBoxForDate.status === 'reopened' ? cashBoxForDate.reopenedAt : undefined,
+				isReopenOperation: cashBoxForDate.status === 'reopened',
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString()
 			};
@@ -542,10 +546,13 @@
 		}
 	}
 	
-	// Función para manejar el botón "Actualizar Balance"
-	async function handleUpdateBalance() {
-		await updateCurrentAmount();
-	}
+// Función para manejar solicitud de reapertura/actualización de balance
+function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance') {
+	cashBoxToReopen = cashBox;
+	reopenType = type;
+	reopenNote = '';
+	showReopenConfirmation = true;
+}
 
 	// Función para manejar la confirmación del saldo pendiente
 	async function handlePendingBalanceConfirm(event: any) {
@@ -656,6 +663,35 @@
 		showOpenForm = false;
 		openingAmount = 0;
 	}
+
+	async function reopenCashBoxConfirm(event: { cashBox: CashBox; reopenType: 'default' | 'update-balance'; allocationNote?: string }) {
+		const { cashBox, reopenType: type, allocationNote } = event;
+		if (!cashBox) return;
+
+		try {
+			const response = await fetch(`/api/cash-boxes/${cashBox.id}/reopen`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ allocationNote, reopenType: type })
+			});
+
+			if (!response.ok) {
+				const error = await response.json();
+				errorMessage = error.error || 'Error al reaperturar la caja';
+				return;
+			}
+
+			await loadCashBoxes();
+			await loadOperationsForDate(currentDate);
+			await updateCurrentAmount();
+
+			showReopenConfirmation = false;
+			cashBoxToReopen = null;
+		} catch (error) {
+			console.error('Error al reaperturar caja:', error);
+			errorMessage = 'Error al reaperturar la caja';
+		}
+	}
 </script>
 
 <div class="min-h-screen bg-gray-50">
@@ -714,17 +750,14 @@
 			<div class="space-y-8">
 				<!-- Tarjeta de caja -->
 				{#if cashBoxForDate}
-					<CashBoxCard
-						cashBox={cashBoxForDate}
-						currentAmount={currentAmount}
-						onClose={closeCashBox}
-						onReopen={(cb) => {
-							cashBoxToReopen = cb;
-							showReopenConfirmation = true;
-						}}
-						onOpen={showOpenCashBoxModal}
-						onUpdateBalance={handleUpdateBalance}
-					/>
+		<CashBoxCard
+			cashBox={cashBoxForDate}
+			currentAmount={currentAmount}
+			onClose={closeCashBox}
+			onReopen={(cb) => handleReopenRequest(cb, 'default')}
+			onOpen={showOpenCashBoxModal}
+			onUpdateBalance={(cb) => handleReopenRequest(cb, 'update-balance')}
+		/>
 				{/if}
 
 				<!-- Tabla de operaciones -->
@@ -799,7 +832,8 @@
 	<ReopenConfirmationModal
 		isOpen={showReopenConfirmation}
 		cashBox={cashBoxToReopen}
-		onConfirm={reopenCashBox}
+		reopenType={reopenType}
+		onConfirm={reopenCashBoxConfirm}
 		onCancel={() => {
 			showReopenConfirmation = false;
 			cashBoxToReopen = null;
