@@ -7,13 +7,12 @@ export type CashBoxStatus = 'empty' | 'open' | 'closed' | 'reopened';
 export interface CashBox {
 	id: string;
 	name: string;
-	status: CashBoxStatus; // Estado unificado
+	status: CashBoxStatus;
 	openingAmount: number;
-	openedAt?: string | null;
-	originalOpenedAt?: string | null; // Fecha original de apertura (antes de reapertura)
-	closedAt?: string | null;
-	reopenedAt?: string | null;
-	businessDate?: string | null; // Business date en zona horaria de Perú
+	openedAt: string | null;
+	closedAt: string | null;
+	reopenedAt: string | null;
+	businessDate: string; // Business date en zona horaria de Perú (YYYY-MM-DD)
 	createdAt: string;
 	updatedAt: string;
 }
@@ -27,14 +26,13 @@ export async function getCashBoxes(platform: App.Platform): Promise<CashBox[]> {
 	
 	// Si no hay base de datos (desarrollo local), usar datos mock
 	if (!db) {
-		// Crear una copia fresca de los datos para asegurar que se devuelvan los datos actualizados
+		// Crear una copia fresca de los datos
 		const freshData = mockCashBoxes.map(cb => ({
 			id: cb.id,
 			name: cb.name,
 			status: cb.status as CashBoxStatus,
 			openingAmount: cb.openingAmount,
 			openedAt: cb.openedAt,
-			originalOpenedAt: cb.originalOpenedAt,
 			closedAt: cb.closedAt,
 			reopenedAt: cb.reopenedAt,
 			businessDate: cb.businessDate,
@@ -42,13 +40,8 @@ export async function getCashBoxes(platform: App.Platform): Promise<CashBox[]> {
 			updatedAt: cb.updatedAt
 		}));
 		
-		console.log('🔍 getCashBoxes returning fresh mock data:', freshData.map(cb => ({
-			id: cb.id,
-			name: cb.name,
-			openingAmount: cb.openingAmount,
-			status: cb.status
-		})));
-		console.log('🔍 Caja Principal openingAmount:', freshData.find(cb => cb.id === '1')?.openingAmount);
+		console.log('🔍 getCashBoxes - mockCashBoxes.length:', mockCashBoxes.length);
+		console.log('🔍 getCashBoxes - returning freshData:', freshData);
 		return freshData;
 	}
 	
