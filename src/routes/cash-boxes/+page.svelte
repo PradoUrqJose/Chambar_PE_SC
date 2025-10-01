@@ -12,10 +12,6 @@
 	import PendingBalanceModal from '$lib/components/PendingBalanceModal.svelte';
 	import type { CashBox } from '$lib/services/cash-boxes-service';
 	import type { Operation } from '$lib/services/operations-service';
-import {
-	getPendingBalance,
-	handlePendingBalanceAction
-} from '$lib/services/cash-boxes-service';
 
 	let { data } = $props<{ data: PageData }>();
 	
@@ -300,7 +296,11 @@ import {
 				const latestClosedBox = sortedBoxes[0];
 				console.log('🧮 Caja cerrada más reciente:', latestClosedBox);
 				
-		const pendingResponse = await fetch(`/api/cash-boxes/pending?date=${currentDateStr}`);
+		const pendingResponse = await fetch('/api/cash-boxes/pending', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ date: currentDateStr })
+		});
 		if (!pendingResponse.ok) {
 			console.error('❌ Error consultando saldo pendiente:', await pendingResponse.text());
 		} else {
@@ -587,37 +587,53 @@ import {
 				await loadCashBoxes();
 			}
 			
-		let actionResult: { success: boolean; error?: string } | undefined;
-			if (action === 'transfer') {
-				console.log('💸 Transfiriendo saldo pendiente a caja:', actualCashBoxId);
-			actionResult = await handlePendingBalanceAction(null as any, 'transfer', {
+		let actionResponse: Response;
+		if (action === 'transfer') {
+			console.log('💸 Transfiriendo saldo pendiente a caja:', actualCashBoxId);
+			actionResponse = await fetch('/api/cash-boxes/pending/action', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'transfer',
 					pendingBalanceId,
 					currentCashBoxId: actualCashBoxId,
 					notes
-				});
-			} else if (action === 'return') {
-			actionResult = await handlePendingBalanceAction(null as any, 'return', {
+				})
+			});
+		} else if (action === 'return') {
+			actionResponse = await fetch('/api/cash-boxes/pending/action', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'return',
 					pendingBalanceId,
 					notes
-				});
-			} else if (action === 'handle') {
-			actionResult = await handlePendingBalanceAction(null as any, 'handle', {
+				})
+			});
+		} else {
+			actionResponse = await fetch('/api/cash-boxes/pending/action', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'handle',
 					pendingBalanceId,
 					notes
-				});
-			}
+				})
+			});
+		}
 
-			if (!actionResult?.success) {
-				console.error('❌ Error al procesar saldo pendiente:', actionResult?.error);
-				errorMessage = actionResult?.error || 'Error al procesar el saldo pendiente';
-				return;
-			}
+		if (!actionResponse.ok) {
+			const errorData = await actionResponse.json().catch(() => ({ error: 'Error al procesar el saldo pendiente' }));
+			console.error('❌ Error al procesar saldo pendiente:', errorData.error);
+			errorMessage = errorData.error || 'Error al procesar el saldo pendiente';
+			return;
+		}
 
-			if (action === 'transfer') {
-				await openCashBoxDirectly(actualCashBoxId);
-			} else {
-				await openCashBoxDirectly(actualCashBoxId);
-			}
+		const resultData = await actionResponse.json();
+		console.log('✅ Acción de saldo pendiente completada:', resultData);
+
+		// Abrir la caja si corresponde (transfer siempre debería abrir con el monto transferido)
+		await openCashBoxDirectly(actualCashBoxId);
 
 			// 🔄 Recargar datos — esto ya dispara la reactividad
 			await loadCashBoxes();
