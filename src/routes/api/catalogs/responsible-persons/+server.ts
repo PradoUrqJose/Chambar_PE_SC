@@ -13,7 +13,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		const newPerson = addResponsiblePerson({
 			name: data.name,
 			email: data.email,
-			phone: data.phone
+			phone: data.phone,
+			status: data.status || 'active'
 		});
 		
 		return json(newPerson, { status: 201 });

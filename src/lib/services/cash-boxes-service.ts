@@ -204,6 +204,33 @@ export async function closeCashBox(
 	if (!db) {
 		console.log('🔒 Modo desarrollo: cerrando caja', id);
 		updateMockCashBoxStatus(id, 'closed');
+		
+		// Crear operación de cierre de caja
+		const { addMockOperation, mockOperations } = await import('$lib/db/mock-data');
+		const cashBox = mockCashBoxes.find(cb => cb.id === id);
+		if (cashBox) {
+			// Calcular el saldo final antes del cierre
+			const operationsForBox = mockOperations.filter(op => op.cashBoxId === id);
+			const currentAmount = operationsForBox.reduce((acc, op) => {
+				return acc + (op.type === 'income' ? op.amount : -op.amount);
+			}, 0);
+			
+			// Crear operación de cierre de caja
+			const description = `Cierre de caja - Saldo final`;
+			
+			addMockOperation({
+				type: 'expense',
+				amount: currentAmount,
+				description: description,
+				cashBoxId: id,
+				companyId: null,
+				operationDetailId: null,
+				responsiblePersonId: null,
+				standId: null
+			});
+			console.log('💰 Operación de cierre creada con saldo:', currentAmount);
+		}
+		
 		console.log('✅ Caja cerrada exitosamente');
 		return { success: true };
 	}

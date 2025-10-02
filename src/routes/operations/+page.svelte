@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { OperationsTable, OperationModal, ConfirmationModal } from '$lib/components';
+	import { OperationsTable, OperationModal, ConfirmationModal, ExcelExporter } from '$lib/components';
 	import type { Operation } from '$lib/services/operations-service';
+	import { getOperationsExportOptions } from '$lib/utils/excel-export';
 
 	// Estado principal
 	let isLoading = $state(true);
@@ -298,6 +299,31 @@
 		return { total, income, expense, net: income - expense };
 	});
 
+	// Columnas para exportación a Excel
+	const operationsColumns = [
+		{ key: 'type', label: 'Tipo', type: 'text' as const },
+		{ key: 'description', label: 'Descripción', type: 'text' as const },
+		{ key: 'amount', label: 'Monto', type: 'text' as const },
+		{ key: 'cashBoxId', label: 'ID Caja', type: 'text' as const },
+		{ key: 'createdAt', label: 'Fecha', type: 'date' as const },
+		{ key: 'attachments', label: 'Archivos', type: 'text' as const }
+	];
+
+	// Formatear datos para exportación
+	function formatOperationsForExport(ops: Operation[]) {
+		return ops.map(op => {
+			const cashBox = cashBoxes.find(cb => cb.id === op.cashBoxId);
+			return {
+				...op,
+				type: op.type === 'income' ? 'Ingreso' : 'Egreso',
+				amount: `${op.type === 'income' ? '+' : '-'}S/. ${op.amount.toFixed(2)}`,
+				cashBoxId: cashBox ? cashBox.name : op.cashBoxId,
+				createdAt: new Date(op.createdAt).toLocaleDateString('es-PE'),
+				attachments: op.attachments && op.attachments.length > 0 ? `${op.attachments.length} archivo(s)` : 'Sin archivos'
+			};
+		});
+	}
+
 	onMount(() => {
 		loadOperations();
 		loadCashBoxes();
@@ -312,7 +338,19 @@
 
 <div class="min-h-screen bg-gray-100 p-4 sm:p-6">
 	<div class="max-w-7xl mx-auto">
-		<h1 class="text-3xl font-bold text-gray-900 mb-6">Gestión de Operaciones</h1>
+		<div class="flex justify-between items-center mb-6">
+			<h1 class="text-3xl font-bold text-gray-900">Gestión de Operaciones</h1>
+			<div class="flex items-center gap-2">
+				<ExcelExporter
+					data={formatOperationsForExport(operations)}
+					columns={operationsColumns}
+					exportOptions={getOperationsExportOptions()}
+					iconOnly={true}
+					onExportComplete={(filename) => successMessage = `Archivo ${filename} exportado correctamente`}
+					onExportError={(error) => errorMessage = `Error al exportar: ${error.message}`}
+				/>
+			</div>
+		</div>
 
 		<!-- Mensajes de feedback -->
 		{#if errorMessage}
@@ -523,6 +561,7 @@
 						</button>
 					</div>
 				</div>
+
 			</div>
 		</div>
 
@@ -545,6 +584,10 @@
 				defaultRowsPerPage={20}
 				showCashBoxInfo={true}
 				{cashBoxes}
+				{companies}
+				{operationDetails}
+				{responsiblePersons}
+				{stands}
 				onEditOperation={handleEditOperation}
 				onDeleteOperation={handleDeleteOperation}
 				showActions={true}

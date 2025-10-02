@@ -1,46 +1,140 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
+	import { ExcelExporter, ExcelMultiSheetExporter } from '$lib/components';
+	import { getReportExportOptions, type SheetData } from '$lib/utils/excel-export';
 
 	let { data } = $props<{ data: PageData }>();
 	
 	let isLoading = $state(true);
 	let errorMessage = $state('');
+	let successMessage = $state('');
 	let selectedPeriod = $state('today');
-	let reportData = $state({});
+	let reportData = $state<Record<string, any>>({});
+	
+	// Datos para exportación
+	let operations = $state<any[]>([]);
+	let companies = $state<any[]>([]);
+	let stands = $state<any[]>([]);
+	let responsiblePersons = $state<any[]>([]);
+	let operationDetails = $state<any[]>([]);
 
 	// Cargar datos de reportes
 	async function loadReports() {
 		try {
 			isLoading = true;
-			// TODO: Implementar carga desde D1
-			// Por ahora datos mock
-			reportData = {
-				today: {
-					income: 1250.00,
-					expense: 300.00,
-					net: 950.00,
-					operations: 45
-				},
-				week: {
-					income: 8750.00,
-					expense: 2100.00,
-					net: 6650.00,
-					operations: 315
-				},
-				month: {
-					income: 35000.00,
-					expense: 8400.00,
-					net: 26600.00,
-					operations: 1260
-				}
-			};
+			
+			// Cargar datos reales desde las APIs
+			await Promise.all([
+				loadOperations(),
+				loadCompanies(),
+				loadStands(),
+				loadResponsiblePersons(),
+				loadOperationDetails()
+			]);
+			
+			// Calcular reportes basados en datos reales
+			calculateReportData();
+			
 		} catch (error) {
 			errorMessage = 'Error al cargar los reportes';
 			console.error('Error loading reports:', error);
 		} finally {
 			isLoading = false;
 		}
+	}
+
+	// Cargar operaciones
+	async function loadOperations() {
+		try {
+			const response = await fetch('/api/operations');
+			if (response.ok) {
+				const data = await response.json();
+				operations = Array.isArray(data) ? data : data.operations || [];
+			}
+		} catch (error) {
+			console.error('Error loading operations:', error);
+		}
+	}
+
+	// Cargar empresas
+	async function loadCompanies() {
+		try {
+			const response = await fetch('/api/catalogs/companies');
+			if (response.ok) {
+				companies = await response.json();
+			}
+		} catch (error) {
+			console.error('Error loading companies:', error);
+		}
+	}
+
+	// Cargar stands
+	async function loadStands() {
+		try {
+			const response = await fetch('/api/catalogs/stands');
+			if (response.ok) {
+				stands = await response.json();
+			}
+		} catch (error) {
+			console.error('Error loading stands:', error);
+		}
+	}
+
+	// Cargar personas responsables
+	async function loadResponsiblePersons() {
+		try {
+			const response = await fetch('/api/catalogs/responsible-persons');
+			if (response.ok) {
+				responsiblePersons = await response.json();
+			}
+		} catch (error) {
+			console.error('Error loading responsible persons:', error);
+		}
+	}
+
+	// Cargar detalles de operación
+	async function loadOperationDetails() {
+		try {
+			const response = await fetch('/api/catalogs/operation-details');
+			if (response.ok) {
+				operationDetails = await response.json();
+			}
+		} catch (error) {
+			console.error('Error loading operation details:', error);
+		}
+	}
+
+	// Calcular datos de reporte
+	function calculateReportData() {
+		const now = new Date();
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+		const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+		// Filtrar operaciones por período
+		const todayOps = operations.filter(op => new Date(op.createdAt) >= today);
+		const weekOps = operations.filter(op => new Date(op.createdAt) >= weekAgo);
+		const monthOps = operations.filter(op => new Date(op.createdAt) >= monthAgo);
+
+		// Calcular métricas
+		reportData = {
+			today: calculateMetrics(todayOps),
+			week: calculateMetrics(weekOps),
+			month: calculateMetrics(monthOps)
+		};
+	}
+
+	// Calcular métricas para un conjunto de operaciones
+	function calculateMetrics(ops: any[]) {
+		const income = ops.filter(op => op.type === 'income').reduce((sum, op) => sum + op.amount, 0);
+		const expense = ops.filter(op => op.type === 'expense').reduce((sum, op) => sum + op.amount, 0);
+		return {
+			income,
+			expense,
+			net: income - expense,
+			operations: ops.length
+		};
 	}
 
 	// Generar reporte
@@ -54,6 +148,82 @@
 		}
 	}
 
+	// Preparar datos para exportación de operaciones
+	function getOperationsForExport() {
+		const now = new Date();
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+		const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+		let filteredOps = operations;
+		if (selectedPeriod === 'today') {
+			filteredOps = operations.filter(op => new Date(op.createdAt) >= today);
+		} else if (selectedPeriod === 'week') {
+			filteredOps = operations.filter(op => new Date(op.createdAt) >= weekAgo);
+		} else if (selectedPeriod === 'month') {
+			filteredOps = operations.filter(op => new Date(op.createdAt) >= monthAgo);
+		}
+
+		return filteredOps.map(op => ({
+			...op,
+			type: op.type === 'income' ? 'Ingreso' : 'Egreso',
+			amount: `${op.type === 'income' ? '+' : '-'}S/. ${op.amount.toFixed(2)}`,
+			createdAt: new Date(op.createdAt).toLocaleDateString('es-PE'),
+			attachments: op.attachments && op.attachments.length > 0 ? `${op.attachments.length} archivo(s)` : 'Sin archivos'
+		}));
+	}
+
+	// Preparar datos para exportación múltiple
+	function getMultiSheetData(): SheetData[] {
+		return [
+			{
+				name: 'Operaciones',
+				data: getOperationsForExport(),
+				columns: [
+					{ key: 'type', label: 'Tipo', type: 'text' as const },
+					{ key: 'description', label: 'Descripción', type: 'text' as const },
+					{ key: 'amount', label: 'Monto', type: 'text' as const },
+					{ key: 'createdAt', label: 'Fecha', type: 'date' as const },
+					{ key: 'attachments', label: 'Archivos', type: 'text' as const }
+				]
+			},
+			{
+				name: 'Empresas',
+				data: companies,
+				columns: [
+					{ key: 'razonSocial', label: 'Razón Social', type: 'text' as const },
+					{ key: 'ruc', label: 'RUC', type: 'text' as const },
+					{ key: 'status', label: 'Estado', type: 'text' as const }
+				]
+			},
+			{
+				name: 'Stands',
+				data: stands,
+				columns: [
+					{ key: 'name', label: 'Nombre', type: 'text' as const },
+					{ key: 'location', label: 'Ubicación', type: 'text' as const },
+					{ key: 'status', label: 'Estado', type: 'text' as const }
+				]
+			},
+			{
+				name: 'Responsables',
+				data: responsiblePersons,
+				columns: [
+					{ key: 'name', label: 'Nombre', type: 'text' as const },
+					{ key: 'email', label: 'Email', type: 'email' as const },
+					{ key: 'phone', label: 'Teléfono', type: 'phone' as const },
+					{ key: 'status', label: 'Estado', type: 'text' as const }
+				]
+			}
+		];
+	}
+
+	// Limpiar mensajes
+	function clearMessages() {
+		errorMessage = '';
+		successMessage = '';
+	}
+
 	onMount(() => {
 		loadReports();
 	});
@@ -65,13 +235,41 @@
 
 <!-- Título principal -->
 <div class="mb-8">
-	<h1 class="text-3xl font-bold text-gray-900">Reportes</h1>
-	<p class="mt-2 text-gray-600">Análisis y reportes del sistema de gestión de caja</p>
+	<div class="flex justify-between items-center">
+		<div>
+			<h1 class="text-3xl font-bold text-gray-900">Reportes</h1>
+			<p class="mt-2 text-gray-600">Análisis y reportes del sistema de gestión de caja</p>
+		</div>
+		<div class="flex items-center gap-2">
+			<ExcelExporter
+				data={getOperationsForExport()}
+				columns={[
+					{ key: 'type', label: 'Tipo', type: 'text' as const },
+					{ key: 'description', label: 'Descripción', type: 'text' as const },
+					{ key: 'amount', label: 'Monto', type: 'text' as const },
+					{ key: 'createdAt', label: 'Fecha', type: 'date' as const },
+					{ key: 'attachments', label: 'Archivos', type: 'text' as const }
+				]}
+				exportOptions={getReportExportOptions('operaciones')}
+				iconOnly={true}
+				onExportComplete={(filename) => successMessage = `Archivo ${filename} exportado correctamente`}
+				onExportError={(error) => errorMessage = `Error al exportar: ${error.message}`}
+			/>
+			<ExcelMultiSheetExporter
+				sheets={getMultiSheetData()}
+				filename="reporte_completo"
+				iconOnly={true}
+				iconPath="/excel-icon-multi.png"
+				onExportComplete={(filename) => successMessage = `Reporte completo ${filename} exportado correctamente`}
+				onExportError={(error) => errorMessage = `Error al exportar reporte: ${error.message}`}
+			/>
+		</div>
+	</div>
 </div>
 
 <div class="max-w-7xl mx-auto">
 
-	<!-- Mensaje de error -->
+	<!-- Mensajes de feedback -->
 	{#if errorMessage}
 		<div class="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
 			<div class="flex">
@@ -79,6 +277,17 @@
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
 				</svg>
 				{errorMessage}
+			</div>
+		</div>
+	{/if}
+
+	{#if successMessage}
+		<div class="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md">
+			<div class="flex">
+				<svg class="w-5 h-5 text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+				{successMessage}
 			</div>
 		</div>
 	{/if}
@@ -142,7 +351,7 @@
 						<div class="ml-5 w-0 flex-1">
 							<dl>
 								<dt class="text-sm font-medium text-gray-500 truncate">Ingresos</dt>
-								<dd class="text-lg font-medium text-gray-900">S/. {reportData[selectedPeriod]?.income?.toFixed(2) || '0.00'}</dd>
+								<dd class="text-lg font-medium text-gray-900">S/. {(reportData[selectedPeriod] as any)?.income?.toFixed(2) || '0.00'}</dd>
 							</dl>
 						</div>
 					</div>
@@ -162,7 +371,7 @@
 						<div class="ml-5 w-0 flex-1">
 							<dl>
 								<dt class="text-sm font-medium text-gray-500 truncate">Egresos</dt>
-								<dd class="text-lg font-medium text-gray-900">S/. {reportData[selectedPeriod]?.expense?.toFixed(2) || '0.00'}</dd>
+								<dd class="text-lg font-medium text-gray-900">S/. {(reportData[selectedPeriod] as any)?.expense?.toFixed(2) || '0.00'}</dd>
 							</dl>
 						</div>
 					</div>
@@ -182,7 +391,7 @@
 						<div class="ml-5 w-0 flex-1">
 							<dl>
 								<dt class="text-sm font-medium text-gray-500 truncate">Neto</dt>
-								<dd class="text-lg font-medium text-gray-900">S/. {reportData[selectedPeriod]?.net?.toFixed(2) || '0.00'}</dd>
+								<dd class="text-lg font-medium text-gray-900">S/. {(reportData[selectedPeriod] as any)?.net?.toFixed(2) || '0.00'}</dd>
 							</dl>
 						</div>
 					</div>
@@ -202,7 +411,7 @@
 						<div class="ml-5 w-0 flex-1">
 							<dl>
 								<dt class="text-sm font-medium text-gray-500 truncate">Operaciones</dt>
-								<dd class="text-lg font-medium text-gray-900">{reportData[selectedPeriod]?.operations || 0}</dd>
+								<dd class="text-lg font-medium text-gray-900">{(reportData[selectedPeriod] as any)?.operations || 0}</dd>
 							</dl>
 						</div>
 					</div>
@@ -210,14 +419,5 @@
 			</div>
 		</div>
 
-		<!-- Botón de generar reporte -->
-		<div class="flex justify-center">
-			<button
-				onclick={generateReport}
-				class="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-			>
-				Generar Reporte Completo
-			</button>
-		</div>
 	{/if}
 </div>

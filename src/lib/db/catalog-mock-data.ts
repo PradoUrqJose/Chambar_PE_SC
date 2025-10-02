@@ -5,6 +5,7 @@ export interface MockCompany {
 	id: string;
 	razonSocial: string;
 	ruc: string;
+	status: 'active' | 'inactive';
 	createdAt: string;
 	updatedAt: string;
 }
@@ -23,6 +24,7 @@ export interface MockResponsiblePerson {
 	name: string;
 	email: string;
 	phone: string;
+	status: 'active' | 'inactive';
 	createdAt: string;
 	updatedAt: string;
 }
@@ -32,6 +34,7 @@ export interface MockOperationDetail {
 	name: string;
 	type: 'income' | 'expense';
 	category: string;
+	status: 'active' | 'inactive';
 	createdAt: string;
 	updatedAt: string;
 }

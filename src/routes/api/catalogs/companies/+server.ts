@@ -12,7 +12,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		
 		const newCompany = addCompany({
 			razonSocial: data.razonSocial,
-			ruc: data.ruc
+			ruc: data.ruc,
+			status: data.status || 'active'
 		});
 		
 		return json(newCompany, { status: 201 });

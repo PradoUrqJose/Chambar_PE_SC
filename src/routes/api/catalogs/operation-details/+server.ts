@@ -13,7 +13,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		const newDetail = addOperationDetail({
 			name: data.name,
 			type: data.type,
-			category: data.category
+			category: data.category,
+			status: data.status || 'active'
 		});
 		
 		return json(newDetail, { status: 201 });
