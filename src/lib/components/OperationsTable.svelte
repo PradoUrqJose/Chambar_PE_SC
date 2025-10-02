@@ -100,7 +100,7 @@
   function getCompanyName(companyId: string | null) {
     if (!companyId) return '';
     const company = companies.find(c => c.id === companyId);
-    return company ? company.razonSocial : '';
+    return company ? (company.razonSocial || company.name) : '';
   }
 
   // Obtener nombre de detalle de operación

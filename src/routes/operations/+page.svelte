@@ -337,7 +337,7 @@
 </svelte:head>
 
 <div class="min-h-screen bg-gray-100 p-4 sm:p-6">
-	<div class="max-w-7xl mx-auto">
+	<div class="max-w-8xl mx-auto">
 		<div class="flex justify-between items-center mb-6">
 			<h1 class="text-3xl font-bold text-gray-900">Gestión de Operaciones</h1>
 			<div class="flex items-center gap-2">

@@ -683,7 +683,7 @@
 </svelte:head>
 
 <div class="min-h-screen bg-gray-100 p-4 sm:p-6">
-  <div class="max-w-7xl mx-auto">
+  <div class="max-w-8xl mx-auto">
     <!-- Título principal -->
     <div class="mb-8">
       <div class="flex justify-between items-center">

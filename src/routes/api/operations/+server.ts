@@ -5,9 +5,19 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ platform, url }) => {
 	try {
 		const date = url.searchParams.get('date');
+		const startDate = url.searchParams.get('startDate');
+		const endDate = url.searchParams.get('endDate');
 		const limit = url.searchParams.get('limit');
 		
 		let operations = await getOperations(platform, date || undefined);
+		
+		// Filtrar por rango de fechas si se proporcionan
+		if (startDate && endDate) {
+			operations = operations.filter(op => {
+				const opDate = op.businessDate || op.createdAt.split('T')[0];
+				return opDate >= startDate && opDate <= endDate;
+			});
+		}
 		
 		// Aplicar límite si se proporciona
 		const limitNum = limit ? parseInt(limit) : operations.length;

@@ -13,3 +13,4 @@ export { default as ConfirmationModal } from './ConfirmationModal.svelte';
 export { default as CatalogTable } from './CatalogTable.svelte';
 export { default as ExcelExporter } from './ExcelExporter.svelte';
 export { default as ExcelMultiSheetExporter } from './ExcelMultiSheetExporter.svelte';
+export { default as Dashboard } from './Dashboard.svelte';
