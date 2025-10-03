@@ -80,31 +80,59 @@
 	// Función para calcular saldo derivado (solo suma de operaciones)
 	async function computeCurrentAmount(cashBoxId: string): Promise<number> {
 		const cashBox = cashBoxes.find(cb => cb.id === cashBoxId);
-		if (!cashBox) return 0;
+		if (!cashBox) {
+			console.log('❌ computeCurrentAmount: Caja no encontrada:', cashBoxId);
+			return 0;
+		}
+		
+		console.log('💰 computeCurrentAmount - cashBoxId:', cashBoxId);
+		console.log('💰 computeCurrentAmount - openingAmount:', cashBox.openingAmount);
+		console.log('💰 computeCurrentAmount - total operations:', operations.length);
+		console.log('💰 computeCurrentAmount - all operations:', operations.map(op => ({ id: op.id, cashBoxId: op.cashBoxId, amount: op.amount, type: op.type })));
 		
 		// Usar las operaciones ya cargadas en el estado
 		const operationsForBox = operations.filter(op => op.cashBoxId === cashBoxId);
+		console.log('💰 computeCurrentAmount - operationsForBox:', operationsForBox.length);
+		console.log('💰 computeCurrentAmount - operationsForBox details:', operationsForBox.map(op => ({ id: op.id, amount: op.amount, type: op.type })));
+		
 		const total = operationsForBox.reduce((acc, op) => {
-			return acc + (op.type === 'income' ? op.amount : -op.amount);
+			const amount = op.type === 'income' ? op.amount : -op.amount;
+			console.log(`💰 computeCurrentAmount - ${op.type}: ${op.amount} -> ${amount} (total: ${acc + amount})`);
+			return acc + amount;
 		}, 0);
 		
-		// NO sumar openingAmount - ya está incluido en las operaciones de apertura
+		console.log('💰 computeCurrentAmount - FINAL TOTAL (solo operaciones):', total);
+		
+		// El openingAmount ya está incluido en las operaciones de apertura, no sumarlo
 		return total;
 	}
 
-	// Caja para la fecha actual (derivado del estado)
+	// Caja para la fecha actual (de la BD o temporal para interfaz)
 	let cashBoxForDate = $derived((() => {
 		const targetDate = toPeruDateString(currentDate);
+		console.log('🔍 cashBoxForDate: Buscando caja para fecha:', targetDate);
+		console.log('🔍 cashBoxForDate: Cajas disponibles:', cashBoxes.map(cb => ({ id: cb.id, businessDate: cb.businessDate, status: cb.status })));
+		console.log('🔍 cashBoxForDate: Cajas completas:', cashBoxes);
 		
-		// Buscar en las cajas cargadas desde la API
-		const existingBox = cashBoxes.find(cb => cb.businessDate === targetDate);
+		// Buscar en las cajas de la base de datos
+		console.log('🔍 cashBoxForDate: Buscando con businessDate:', targetDate);
+		console.log('🔍 cashBoxForDate: Cajas disponibles con businessDate:', cashBoxes.map(cb => ({ id: cb.id, businessDate: cb.businessDate, status: cb.status })));
 		
-		// Si existe en la API, usarla
+		const existingBox = cashBoxes.find(cb => {
+			console.log(`🔍 Comparando: "${cb.businessDate}" (${typeof cb.businessDate}) === "${targetDate}" (${typeof targetDate}) = ${cb.businessDate === targetDate}`);
+			console.log(`🔍 Detalles: cb.businessDate.length=${cb.businessDate?.length}, targetDate.length=${targetDate.length}`);
+			return cb.businessDate === targetDate;
+		});
+		console.log('🔍 cashBoxForDate: Caja encontrada:', existingBox ? { id: existingBox.id, status: existingBox.status, businessDate: existingBox.businessDate } : 'null');
+		
+		// Si existe en la BD, usarla
 		if (existingBox) {
+			console.log('✅ cashBoxForDate: Usando caja de la BD');
 			return existingBox;
 		}
 		
-		// Si no existe, retornar una caja vacía por defecto (sin necesidad de backend)
+		// Si no existe, crear caja temporal SOLO para la interfaz
+		console.log('⚠️ cashBoxForDate: Creando caja temporal para interfaz');
 		return {
 			id: `temp-${targetDate}`,
 			name: `Caja ${targetDate}`,
@@ -161,7 +189,10 @@
 
 	// Función para actualizar caja abierta actual
 	function updateCurrentOpenCashBox() {
+		console.log('🔄 updateCurrentOpenCashBox: cashBoxForDate =', cashBoxForDate);
+		console.log('🔄 updateCurrentOpenCashBox: cashBoxes =', cashBoxes);
 		currentOpenCashBox = cashBoxForDate;
+		console.log('🔄 updateCurrentOpenCashBox: currentOpenCashBox actualizado =', currentOpenCashBox);
 	}
 
 	// Función para cargar operaciones para una fecha
@@ -169,20 +200,53 @@
 		if (showLoading) isLoading = true;
 		
 		try {
-			const dateStr = toPeruDateString(date);
-			console.log('🔍 loadOperationsForDate - Requesting operations for date:', dateStr);
-			const response = await fetch(`/api/operations?date=${dateStr}`);
-			
-			if (response.ok) {
-				const data = await response.json();
-				operations = Array.isArray(data) ? data : (data.operations || []);
-				console.log('🔄 OPERACIONES CARGADAS:', {
-					total: data.total || operations.length,
-					operations: operations.map((op: any) => ({ id: op.id, description: op.description, amount: op.amount }))
-				});
+			// Si hay una caja para esta fecha, cargar operaciones por cashBoxId
+			if (cashBoxForDate && !cashBoxForDate.id.startsWith('temp-')) {
+				console.log('🔍 loadOperationsForDate - Requesting operations for cashBoxId:', cashBoxForDate.id);
+				const response = await fetch(`/api/operations?cashBoxId=${cashBoxForDate.id}`);
+				
+				if (response.ok) {
+					const data = await response.json();
+					operations = Array.isArray(data) ? data : (data.operations || []);
+					console.log('🔄 OPERACIONES CARGADAS POR CAJA:', {
+						cashBoxId: cashBoxForDate.id,
+						total: data.total || operations.length,
+						operations: operations.map((op: any) => ({ 
+							id: op.id, 
+							description: op.description, 
+							amount: op.amount,
+							cashBoxId: op.cashBoxId,
+							businessDate: op.businessDate
+						}))
+					});
+				} else {
+					console.error('❌ Error loading operations by cashBoxId:', response.statusText);
+					operations = [];
+				}
 			} else {
-				console.error('❌ Error loading operations:', response.statusText);
-				operations = [];
+				// Si no hay caja o es temporal, cargar por fecha (para compatibilidad)
+				const dateStr = toPeruDateString(date);
+				console.log('🔍 loadOperationsForDate - Requesting operations for date:', dateStr);
+				const response = await fetch(`/api/operations?date=${dateStr}`);
+				
+				if (response.ok) {
+					const data = await response.json();
+					operations = Array.isArray(data) ? data : (data.operations || []);
+					console.log('🔄 OPERACIONES CARGADAS POR FECHA:', {
+						date: dateStr,
+						total: data.total || operations.length,
+						operations: operations.map((op: any) => ({ 
+							id: op.id, 
+							description: op.description, 
+							amount: op.amount,
+							cashBoxId: op.cashBoxId,
+							businessDate: op.businessDate
+						}))
+					});
+				} else {
+					console.error('❌ Error loading operations by date:', response.statusText);
+					operations = [];
+				}
 			}
 		} catch (error) {
 			console.error('💥 Error loading operations:', error);
@@ -195,13 +259,17 @@
 	// Función para cargar cajas desde la API
 	async function loadCashBoxes() {
 		try {
+			console.log('🔄 loadCashBoxes: Iniciando carga de cajas...');
 			const response = await fetch('/api/cash-boxes');
 			
 			if (response.ok) {
 				const data = await response.json();
+				console.log('🔄 loadCashBoxes: Datos recibidos de API:', data);
 				cashBoxes = data;
 				console.log(`📦 Cajas cargadas desde API (${cashBoxes.length}):`, cashBoxes);
+				console.log('🔄 loadCashBoxes: Estado actualizado, llamando updateCurrentOpenCashBox...');
 				updateCurrentOpenCashBox();
+				console.log('🔄 loadCashBoxes: updateCurrentOpenCashBox completado');
 			} else {
 				console.error('❌ Error loading cash boxes:', response.statusText);
 			}
@@ -326,14 +394,14 @@
 		}
 			}
 
-			// Si no hay saldo pendiente, continuar con apertura normal
-			// Si es una caja temporal (no existe en backend), crearla primero
-			if (cashBoxForDate.id.startsWith('temp-')) {
-				await createAndOpenCashBox();
-			} else {
-				// Si ya existe, solo abrirla
-				await openCashBoxDirectly(cashBoxForDate.id);
-			}
+		// Si no hay saldo pendiente, continuar con apertura normal
+		// Si es una caja temporal (no existe en BD), crearla primero
+		if (cashBoxForDate.id.startsWith('temp-')) {
+			await createAndOpenCashBox();
+		} else {
+			// Si ya existe en la BD, solo abrirla
+			await openCashBoxDirectly(cashBoxForDate.id);
+		}
 		} catch (error) {
 			console.error('Error opening cash box:', error);
 			errorMessage = 'Error al abrir la caja';
@@ -374,6 +442,14 @@
 			// Abrir la caja recién creada
 			console.log('📦 Abriendo caja con ID:', newCashBox.id);
 			await openCashBoxDirectly(newCashBox.id);
+			
+			// Recargar operaciones para la fecha actual para mostrar las operaciones de la nueva caja
+			await loadOperationsForDate(currentDate);
+			await updateCurrentAmount();
+			
+			// Forzar actualización del estado para asegurar que cashBoxForDate se actualice
+			console.log('🔄 Forzando actualización del estado después de crear caja');
+			// El $derived se actualizará automáticamente cuando cashBoxes cambie
 		} catch (error) {
 			console.error('💥 Error creating and opening cash box:', error);
 			errorMessage = 'Error al crear la caja';
@@ -470,24 +546,54 @@
 		}
 	}
 
+	// Función wrapper para crear operación desde el modal
+	async function handleCreateOperation(operationData: any) {
+		// Usar la caja de la fecha actual
+		const targetCashBoxId = cashBoxForDate?.id;
+		console.log('🎯 handleCreateOperation - targetCashBoxId:', targetCashBoxId);
+		console.log('🎯 handleCreateOperation - cashBoxForDate:', cashBoxForDate);
+		await createOperation(operationData, targetCashBoxId);
+	}
+
 	// Función para crear operación
-	async function createOperation(operationData: any) {
+	async function createOperation(operationData: any, targetCashBoxId?: string) {
 		try {
-			if (!cashBoxForDate) {
-				errorMessage = 'No hay caja abierta para esta fecha';
+			// Usar el cashBoxId específico si se proporciona, sino usar el de la fecha actual
+			const cashBoxId = targetCashBoxId || cashBoxForDate?.id;
+			
+			if (!cashBoxId) {
+				errorMessage = 'No hay caja especificada para la operación';
 				return;
 			}
 
-			if (cashBoxForDate.status !== 'open' && cashBoxForDate.status !== 'reopened') {
+			// Si es caja temporal, no permitir crear operaciones
+			if (cashBoxId.startsWith('temp-')) {
+				errorMessage = 'Debe crear y abrir la caja primero';
+				return;
+			}
+
+			// Buscar la caja específica para verificar su estado
+			const targetCashBox = cashBoxes.find(cb => cb.id === cashBoxId);
+			if (!targetCashBox) {
+				errorMessage = 'Caja no encontrada';
+				return;
+			}
+
+			if (targetCashBox.status !== 'open' && targetCashBox.status !== 'reopened') {
 				errorMessage = 'La caja debe estar abierta o reaperturada';
 				return;
 			}
 
+			console.log('💰 createOperation - cashBoxId:', cashBoxId);
+			console.log('💰 createOperation - targetCashBox:', targetCashBox);
+			console.log('💰 createOperation - operationData:', operationData);
+
 			const finalOperationData = {
 				...operationData,
-				cashBoxId: cashBoxForDate.id,
-				reopenBatchId: cashBoxForDate.status === 'reopened' ? cashBoxForDate.reopenedAt : undefined,
-				isReopenOperation: cashBoxForDate.status === 'reopened',
+				cashBoxId: cashBoxId,
+				businessDate: targetCashBox.businessDate, // Usar el businessDate de la caja
+				reopenBatchId: targetCashBox.status === 'reopened' ? targetCashBox.reopenedAt : undefined,
+				isReopenOperation: targetCashBox.status === 'reopened',
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString()
 			};
@@ -632,8 +738,13 @@
 	// Función para actualizar el monto actual de la caja
 	async function updateCurrentAmount() {
 		if (cashBoxForDate) {
-			currentAmount = await computeCurrentAmount(cashBoxForDate.id);
+			const newAmount = await computeCurrentAmount(cashBoxForDate.id);
+			console.log('💰 updateCurrentAmount - Antes:', currentAmount, 'Después:', newAmount);
+			currentAmount = newAmount;
 			console.log('💰 CURRENT AMOUNT UPDATED:', currentAmount);
+		} else {
+			currentAmount = 0;
+			console.log('💰 CURRENT AMOUNT UPDATED: 0 (no hay caja)');
 		}
 	}
 	
@@ -660,7 +771,7 @@ function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance
 			
 			// Si la caja es temporal, primero crearla en el backend
 			let actualCashBoxId = cashBoxForDate.id;
-	if (cashBoxForDate.id.startsWith('temp-')) {
+			if (cashBoxForDate.id.startsWith('temp-')) {
 				console.log('📦 Creando caja en backend antes de transferir...');
 				const targetDate = toPeruDateString(currentDate);
 				const createResponse = await fetch('/api/cash-boxes', {
@@ -860,16 +971,14 @@ function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance
 		{:else}
 			<div class="space-y-8">
 				<!-- Tarjeta de caja -->
-				{#if cashBoxForDate}
-		<CashBoxCard
-			cashBox={cashBoxForDate}
-			currentAmount={currentAmount}
-			onClose={closeCashBox}
-			onReopen={(cb) => handleReopenRequest(cb, 'default')}
-			onOpen={showOpenCashBoxModal}
-			onUpdateBalance={(cb) => handleReopenRequest(cb, 'update-balance')}
-		/>
-				{/if}
+				<CashBoxCard
+					cashBox={cashBoxForDate}
+					currentAmount={currentAmount}
+					onClose={closeCashBox}
+					onReopen={(cb) => handleReopenRequest(cb, 'default')}
+					onOpen={showOpenCashBoxModal}
+					onUpdateBalance={(cb) => handleReopenRequest(cb, 'update-balance')}
+				/>
 
 				<!-- Tabla de operaciones -->
 				<OperationsTable
@@ -942,7 +1051,7 @@ function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance
 	<OperationModal
 		isOpen={showOperationsModal}
 		onClose={() => showOperationsModal = false}
-		onSubmit={createOperation}
+		onSubmit={handleCreateOperation}
 		{operationDetails}
 		{responsiblePersons}
 		{stands}

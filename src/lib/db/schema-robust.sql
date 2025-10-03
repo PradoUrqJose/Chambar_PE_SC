@@ -7,10 +7,12 @@ CREATE TABLE cash_boxes (
   name              TEXT NOT NULL,
   status            TEXT NOT NULL CHECK (status IN ('empty','open','closed','reopened')),
   opening_amount    NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (opening_amount >= 0),
+  current_amount    NUMERIC(12,2) DEFAULT 0,  -- saldo actual calculado
   opened_at_utc     TEXT,                     -- ISO UTC (nullable si 'empty')
   original_opened_at_utc TEXT,                -- primera apertura (nullable)
   closed_at_utc     TEXT,                     -- nullable
   reopened_at_utc   TEXT,                     -- nullable (última reapertura)
+  reopen_notes      TEXT,                     -- notas de reapertura (nullable)
   business_date     TEXT,                     -- 'YYYY-MM-DD' en America/Lima (nullable si 'empty')
   created_at_utc    TEXT NOT NULL,
   updated_at_utc    TEXT NOT NULL
@@ -62,6 +64,9 @@ CREATE TABLE operations (
   responsible_person_id TEXT,  -- FK a catálogo si aplica
   stand_id              TEXT,  -- FK a catálogo si aplica
   company_id            TEXT,  -- FK a catálogo si aplica
+  image                 TEXT,  -- URL o path de imagen adjunta (compatibilidad)
+  attachments_json      TEXT,  -- JSON array de archivos adjuntos
+  is_reopen_operation   BOOLEAN DEFAULT 0,  -- Si es operación de reapertura
   created_at_utc        TEXT NOT NULL,     -- evento
   updated_at_utc        TEXT NOT NULL,
   business_date         TEXT NOT NULL      -- 'YYYY-MM-DD' (America/Lima) calculado al crear
@@ -69,6 +74,65 @@ CREATE TABLE operations (
 
 CREATE INDEX idx_ops_cashbox ON operations(cash_box_id);
 CREATE INDEX idx_ops_business_date ON operations(business_date);
+
+-- Tabla de saldos pendientes
+CREATE TABLE pending_balances (
+  id                    TEXT PRIMARY KEY,
+  cash_box_id           TEXT NOT NULL REFERENCES cash_boxes(id) ON DELETE CASCADE,
+  amount                NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  date                  TEXT NOT NULL,                     -- 'YYYY-MM-DD' (America/Lima)
+  status                TEXT NOT NULL CHECK (status IN ('pending','transferred','returned','handled')),
+  notes                 TEXT,                              -- Notas opcionales
+  handled_at_utc        TEXT,                              -- Timestamp cuando se manejó
+  created_at_utc        TEXT NOT NULL,
+  updated_at_utc        TEXT NOT NULL
+);
+
+CREATE INDEX idx_pending_balances_cash_box ON pending_balances(cash_box_id);
+CREATE INDEX idx_pending_balances_date ON pending_balances(date);
+CREATE INDEX idx_pending_balances_status ON pending_balances(status);
+CREATE INDEX idx_pending_balances_date_status ON pending_balances(date, status);
+
+-- Tablas de catálogos
+CREATE TABLE companies (
+  id                TEXT PRIMARY KEY,
+  razon_social      TEXT NOT NULL,
+  ruc               TEXT NOT NULL,
+  address           TEXT,
+  phone             TEXT,
+  status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+  created_at_utc    TEXT NOT NULL,
+  updated_at_utc    TEXT NOT NULL
+);
+
+CREATE TABLE stands (
+  id                TEXT PRIMARY KEY,
+  name              TEXT NOT NULL,
+  location          TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+  created_at_utc    TEXT NOT NULL,
+  updated_at_utc    TEXT NOT NULL
+);
+
+CREATE TABLE responsible_persons (
+  id                TEXT PRIMARY KEY,
+  name              TEXT NOT NULL,
+  email             TEXT NOT NULL,
+  phone             TEXT,
+  status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+  created_at_utc    TEXT NOT NULL,
+  updated_at_utc    TEXT NOT NULL
+);
+
+CREATE TABLE operation_details (
+  id                TEXT PRIMARY KEY,
+  name              TEXT NOT NULL,
+  description       TEXT,
+  type              TEXT NOT NULL CHECK (type IN ('income','expense')),
+  status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+  created_at_utc    TEXT NOT NULL,
+  updated_at_utc    TEXT NOT NULL
+);
 
 -- Vista para calcular saldo derivado
 CREATE VIEW cash_box_balances AS

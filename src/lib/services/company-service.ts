@@ -10,11 +10,24 @@ export async function getCompany(platform: App.Platform): Promise<Company | null
 		return mockCompanies[0] as Company;
 	}
 	
-	const companies = await executeQuery<Company>(
+	const results = await executeQuery<any>(
 		db,
-		'SELECT * FROM companies ORDER BY created_at DESC LIMIT 1'
+		'SELECT * FROM companies ORDER BY created_at_utc DESC LIMIT 1'
 	);
-	return companies[0] || null;
+	
+	if (results.length === 0) return null;
+	
+	const row = results[0];
+	return {
+		id: row.id,
+		razonSocial: row.razon_social,
+		ruc: row.ruc,
+		address: row.address,
+		phone: row.phone,
+		status: row.status,
+		createdAt: row.created_at_utc,
+		updatedAt: row.updated_at_utc
+	};
 }
 
 export async function getCompanies(platform: App.Platform): Promise<Company[]> {
@@ -25,10 +38,22 @@ export async function getCompanies(platform: App.Platform): Promise<Company[]> {
 		return mockCompanies as Company[];
 	}
 	
-	return await executeQuery<Company>(
+	const results = await executeQuery<any>(
 		db,
-		'SELECT * FROM companies ORDER BY created_at DESC'
+		'SELECT * FROM companies ORDER BY created_at_utc DESC'
 	);
+	
+	// Mapear los campos de la BD a la interfaz Company
+	return results.map((row: any) => ({
+		id: row.id,
+		razonSocial: row.razon_social,
+		ruc: row.ruc,
+		address: row.address,
+		phone: row.phone,
+		status: row.status,
+		createdAt: row.created_at_utc,
+		updatedAt: row.updated_at_utc
+	}));
 }
 
 export async function createCompany(
@@ -47,10 +72,13 @@ export async function createCompany(
 		return { success: true, id: newCompany.id };
 	}
 	
+	const id = `company-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+	const now = new Date().toISOString();
+	
 	return await executeMutation(
 		db,
-		'INSERT INTO companies (razon_social, ruc) VALUES (?, ?)',
-		[data.razonSocial, data.ruc]
+		'INSERT INTO companies (id, razon_social, ruc, address, phone, status, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+		[id, data.razonSocial, data.ruc, data.address || null, data.phone || null, 'active', now, now]
 	);
 }
 
@@ -87,7 +115,8 @@ export async function updateCompany(
 		return { success: true };
 	}
 
-	updates.push('updated_at = CURRENT_TIMESTAMP');
+	updates.push('updated_at_utc = ?');
+	params.push(new Date().toISOString());
 	params.push(id);
 
 	return await executeMutation(
@@ -95,4 +124,33 @@ export async function updateCompany(
 		`UPDATE companies SET ${updates.join(', ')} WHERE id = ?`,
 		params
 	);
+}
+
+export async function deleteCompany(
+	platform: App.Platform,
+	id: string
+): Promise<{ success: boolean; error?: string }> {
+	const db = getD1Database(platform);
+	
+	// Si no hay base de datos (desarrollo local), simular éxito
+	if (!db) {
+		console.log('⚠️ deleteCompany: No hay BD, simulando éxito');
+		return { success: true };
+	}
+	
+	console.log('🗑️ deleteCompany: Eliminando empresa con ID:', id);
+	
+	const result = await executeMutation(
+		db,
+		'DELETE FROM companies WHERE id = ?',
+		[id]
+	);
+	
+	if (!result.success) {
+		console.error('❌ deleteCompany: Error eliminando empresa:', result.error);
+		return result;
+	}
+	
+	console.log('✅ deleteCompany: Empresa eliminada exitosamente');
+	return { success: true };
 }

@@ -12,14 +12,21 @@ export interface Attachment {
 }
 
 /**
- * Genera un nombre único para el archivo
+ * Genera un nombre único para el archivo más amigable
  */
 export function generateFileName(originalName: string): string {
-	const timestamp = Date.now();
-	const random = Math.random().toString(36).substring(2, 9);
+	const timestamp = new Date();
+	const dateStr = timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
+	const timeStr = timestamp.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+	const random = Math.random().toString(36).substring(2, 6); // 4 caracteres aleatorios
+	
 	const extension = originalName.split('.').pop();
-	const nameWithoutExt = originalName.replace(`.${extension}`, '').replace(/[^a-zA-Z0-9]/g, '-');
-	return `${timestamp}-${random}-${nameWithoutExt}.${extension}`;
+	const nameWithoutExt = originalName.replace(`.${extension}`, '')
+		.replace(/[^a-zA-Z0-9\s]/g, '') // Solo letras, números y espacios
+		.replace(/\s+/g, '-') // Espacios por guiones
+		.substring(0, 30); // Máximo 30 caracteres
+	
+	return `${dateStr}_${timeStr}_${nameWithoutExt}_${random}.${extension}`;
 }
 
 /**

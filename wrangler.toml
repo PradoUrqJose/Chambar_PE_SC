@@ -1,10 +1,18 @@
 name = "chambar"
 compatibility_date = "2024-01-15"
+pages_build_output_dir = ".svelte-kit/cloudflare"
 
+# Base de datos de desarrollo
 [[d1_databases]]
 binding = "DB"
 database_name = "chambar-dev"
 database_id = "81e6d59a-0dbf-4216-99e1-63d4326c8dab"
+
+# Base de datos de producción
+[[d1_databases]]
+binding = "DB_PROD"
+database_name = "chambar-prod"
+database_id = "1149c524-0aa2-4f75-bdb8-31db23539e99"
 
 [[r2_buckets]]
 binding = "ATTACHMENTS"

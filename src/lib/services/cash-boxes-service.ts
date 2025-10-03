@@ -16,6 +16,7 @@ export interface CashBox {
 	name: string;
 	status: CashBoxStatus;
 	openingAmount: number;
+	currentAmount: number;
 	openedAt: string | null;
 	closedAt: string | null;
 	reopenedAt: string | null;
@@ -58,6 +59,7 @@ export async function getCashBoxes(platform: App.Platform): Promise<CashBox[]> {
 			name: cb.name,
 			status: cb.status as CashBoxStatus,
 			openingAmount: cb.openingAmount,
+			currentAmount: cb.currentAmount || 0,
 			openedAt: cb.openedAt,
 			closedAt: cb.closedAt,
 			reopenedAt: cb.reopenedAt,
@@ -71,10 +73,25 @@ export async function getCashBoxes(platform: App.Platform): Promise<CashBox[]> {
 		return freshData;
 	}
 	
-	return await executeQuery<CashBox>(
+	const results = await executeQuery<any>(
 		db,
-		'SELECT * FROM cash_boxes ORDER BY created_at DESC'
+		'SELECT * FROM cash_boxes ORDER BY created_at_utc DESC'
 	);
+	
+	// Mapear los campos de la BD a la interfaz CashBox
+	return results.map((row: any) => ({
+		id: row.id,
+		name: row.name,
+		status: row.status as CashBoxStatus,
+		openingAmount: row.opening_amount,
+		currentAmount: row.current_amount || 0,
+		openedAt: row.opened_at_utc,
+		closedAt: row.closed_at_utc,
+		reopenedAt: row.reopened_at_utc,
+		businessDate: row.business_date, // Mapear business_date a businessDate
+		createdAt: row.created_at_utc,
+		updatedAt: row.updated_at_utc
+	}));
 }
 
 export async function createCashBox(
@@ -91,10 +108,13 @@ export async function createCashBox(
 		return { success: true, id: newCashBox.id };
 	}
 	
+	const id = `cashbox-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+	const now = new Date().toISOString();
+	
 	return await executeMutation(
 		db,
-		'INSERT INTO cash_boxes (name, business_date) VALUES (?, ?)',
-		[data.name, data.businessDate]
+		'INSERT INTO cash_boxes (id, name, business_date, status, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?)',
+		[id, data.name, data.businessDate, 'empty', now, now]
 	);
 }
 
@@ -109,8 +129,42 @@ export async function getPendingBalance(
 		return pending ? { ...pending } : null;
 	}
 
-	// TODO: Implementar consulta real a D1 cuando esté disponible
-	return null;
+	try {
+		console.log('🔍 getPendingBalance D1: Buscando saldo pendiente para fecha:', currentDate);
+		
+		// Buscar el saldo pendiente más reciente anterior a la fecha actual
+		const result = await db.prepare(`
+			SELECT pb.*, cb.name as cashBoxName
+			FROM pending_balances pb
+			JOIN cash_boxes cb ON pb.cash_box_id = cb.id
+			WHERE pb.date < ? 
+				AND pb.status = 'pending'
+			ORDER BY pb.date DESC, pb.created_at_utc DESC
+			LIMIT 1
+		`).bind(currentDate).first();
+
+		if (!result) {
+			console.log('🔍 getPendingBalance D1: No se encontró saldo pendiente');
+			return null;
+		}
+
+		console.log('✅ getPendingBalance D1: Saldo pendiente encontrado:', result);
+		
+		return {
+			id: result.id,
+			cashBoxId: result.cash_box_id,
+			amount: result.amount,
+			date: result.date,
+			status: result.status,
+			notes: result.notes,
+			handledAt: result.handled_at_utc,
+			createdAt: result.created_at_utc,
+			updatedAt: result.updated_at_utc
+		};
+	} catch (error) {
+		console.error('❌ getPendingBalance D1: Error:', error);
+		return null;
+	}
 }
 
 export async function handlePendingBalanceAction(
@@ -140,8 +194,109 @@ export async function handlePendingBalanceAction(
 		return result.success ? { success: true } : { success: false, error: result.error };
 	}
 
-	// TODO: Implementar lógica real contra D1
-	return { success: false, error: 'Pending balance actions not implemented for D1 yet' };
+	try {
+		console.log('🔄 handlePendingBalanceAction D1: Procesando acción:', action, data);
+		
+		// Obtener el saldo pendiente
+		const pendingBalance = await db.prepare(`
+			SELECT pb.*, cb.name as cashBoxName
+			FROM pending_balances pb
+			JOIN cash_boxes cb ON pb.cash_box_id = cb.id
+			WHERE pb.id = ? AND pb.status = 'pending'
+		`).bind(data.pendingBalanceId).first();
+
+		if (!pendingBalance) {
+			return { success: false, error: 'Saldo pendiente no encontrado o ya procesado' };
+		}
+
+		const now = new Date().toISOString();
+		const newStatus = action === 'transfer' ? 'transferred' : action === 'return' ? 'returned' : 'handled';
+
+		if (action === 'transfer') {
+			if (!data.currentCashBoxId) {
+				return { success: false, error: 'currentCashBoxId es requerido para transferir' };
+			}
+
+			// Verificar que la caja destino existe
+			const targetCashBox = await db.prepare(`
+				SELECT id, name, opening_amount FROM cash_boxes WHERE id = ?
+			`).bind(data.currentCashBoxId).first();
+
+			if (!targetCashBox) {
+				return { success: false, error: 'Caja destino no encontrada' };
+			}
+
+			// Actualizar el saldo pendiente
+			await db.prepare(`
+				UPDATE pending_balances 
+				SET status = ?, handled_at_utc = ?, notes = ?, updated_at_utc = ?
+				WHERE id = ?
+			`).bind(newStatus, now, data.notes || `Transferido a ${targetCashBox.name}`, now, data.pendingBalanceId).run();
+
+			// Actualizar el monto de apertura de la caja destino
+			await db.prepare(`
+				UPDATE cash_boxes 
+				SET opening_amount = opening_amount + ?, updated_at_utc = ?
+				WHERE id = ?
+			`).bind(pendingBalance.amount, now, data.currentCashBoxId).run();
+
+			// Crear operación de transferencia de salida en la caja original
+			const transferOutId = `transfer-out-${Date.now()}`;
+			await db.prepare(`
+				INSERT INTO operations (id, cash_box_id, type, amount, description, business_date, created_at_utc, updated_at_utc)
+				VALUES (?, ?, 'expense', ?, ?, ?, ?, ?)
+			`).bind(
+				transferOutId,
+				pendingBalance.cash_box_id,
+				pendingBalance.amount,
+				`Transferencia de saldo a ${targetCashBox.name}`,
+				pendingBalance.date,
+				now,
+				now
+			).run();
+
+			// Crear operación de transferencia de entrada en la caja destino
+			const transferInId = `transfer-in-${Date.now()}`;
+			await db.prepare(`
+				INSERT INTO operations (id, cash_box_id, type, amount, description, business_date, created_at_utc, updated_at_utc)
+				VALUES (?, ?, 'income', ?, ?, ?, ?, ?)
+			`).bind(
+				transferInId,
+				data.currentCashBoxId,
+				pendingBalance.amount,
+				`Transferencia de saldo desde ${pendingBalance.cashBoxName}`,
+				pendingBalance.date,
+				now,
+				now
+			).run();
+
+			console.log('✅ Transferencia D1 completada:', {
+				amount: pendingBalance.amount,
+				from: pendingBalance.cash_box_id,
+				to: data.currentCashBoxId
+			});
+
+			return {
+				success: true,
+				amount: pendingBalance.amount,
+				originalCashBoxId: pendingBalance.cash_box_id,
+				currentCashBoxId: data.currentCashBoxId
+			};
+		} else {
+			// Para 'return' y 'handle', solo actualizar el estado
+			await db.prepare(`
+				UPDATE pending_balances 
+				SET status = ?, handled_at_utc = ?, notes = ?, updated_at_utc = ?
+				WHERE id = ?
+			`).bind(newStatus, now, data.notes, now, data.pendingBalanceId).run();
+
+			console.log('✅ Acción D1 completada:', { action, pendingBalanceId: data.pendingBalanceId });
+			return { success: true };
+		}
+	} catch (error) {
+		console.error('❌ handlePendingBalanceAction D1: Error:', error);
+		return { success: false, error: 'Error al procesar la acción del saldo pendiente' };
+	}
 }
 
 export async function openCashBox(
@@ -187,11 +342,40 @@ export async function openCashBox(
 	const openTime = openedAt || new Date().toISOString();
 	const reopenedTime = estado === 'reaperturado' ? new Date().toISOString() : null;
 	
-	return await executeMutation(
+	// Actualizar estado de la caja
+	const updateResult = await executeMutation(
 		db,
-		'UPDATE cash_boxes SET status = ?, estado = ?, opening_amount = ?, current_amount = ?, opened_at = ?, reopened_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-		['open', estado, openingAmount, openingAmount, openTime, reopenedTime, id]
+		'UPDATE cash_boxes SET status = ?, opening_amount = ?, opened_at_utc = ?, reopened_at_utc = ?, updated_at_utc = ? WHERE id = ?',
+		['open', openingAmount, openTime, reopenedTime, new Date().toISOString(), id]
 	);
+	
+	if (!updateResult.success) {
+		return updateResult;
+	}
+	
+	// Crear operación de apertura de caja si hay monto inicial
+	if (openingAmount > 0) {
+		console.log('💰 Creando operación de apertura con monto:', openingAmount);
+		
+		const operationId = `op-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+		const now = new Date().toISOString();
+		const businessDate = openTime.split('T')[0]; // Extraer fecha YYYY-MM-DD
+		
+		const operationResult = await executeMutation(
+			db,
+			'INSERT INTO operations (id, cash_box_id, type, amount, description, operation_detail_id, responsible_person_id, stand_id, company_id, created_at_utc, updated_at_utc, business_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+			[operationId, id, 'income', openingAmount, 'Apertura de caja - Monto inicial', null, null, null, null, now, now, businessDate]
+		);
+		
+		if (!operationResult.success) {
+			console.error('❌ Error creando operación de apertura:', operationResult.error);
+			// No fallar la apertura por esto, solo loggear
+		} else {
+			console.log('✅ Operación de apertura creada:', operationId);
+		}
+	}
+	
+	return updateResult;
 }
 
 export async function closeCashBox(
@@ -235,11 +419,62 @@ export async function closeCashBox(
 		return { success: true };
 	}
 	
-	return await executeMutation(
-		db,
-		'UPDATE cash_boxes SET status = ?, estado = ?, closed_at = CURRENT_TIMESTAMP, reopened_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-		['closed', 'cerrado', id]
-	);
+	try {
+		console.log('🔒 closeCashBox D1: Cerrando caja', id);
+		
+		// Obtener información de la caja
+		const cashBox = await db.prepare(`
+			SELECT cb.*, 
+				COALESCE(SUM(CASE WHEN o.type='income' THEN o.amount ELSE 0 END), 0) as total_income,
+				COALESCE(SUM(CASE WHEN o.type='expense' THEN o.amount ELSE 0 END), 0) as total_expense
+			FROM cash_boxes cb
+			LEFT JOIN operations o ON o.cash_box_id = cb.id
+			WHERE cb.id = ?
+			GROUP BY cb.id
+		`).bind(id).first();
+
+		if (!cashBox) {
+			return { success: false, error: 'Caja no encontrada' };
+		}
+
+		// Calcular saldo final (solo operaciones, el opening_amount ya está incluido en las operaciones de apertura)
+		const currentAmount = cashBox.total_income - cashBox.total_expense;
+		console.log('💰 Saldo final calculado (solo operaciones):', currentAmount);
+
+		const now = new Date().toISOString();
+
+		// Cerrar la caja
+		await db.prepare(`
+			UPDATE cash_boxes 
+			SET status = ?, closed_at_utc = ?, reopened_at_utc = NULL, updated_at_utc = ?
+			WHERE id = ?
+		`).bind('closed', now, now, id).run();
+
+		// Si hay saldo positivo, crear saldo pendiente
+		if (currentAmount > 0) {
+			const pendingBalanceId = `pending-${id}-${Date.now()}`;
+			await db.prepare(`
+				INSERT INTO pending_balances (id, cash_box_id, amount, date, status, notes, created_at_utc, updated_at_utc)
+				VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
+			`).bind(
+				pendingBalanceId,
+				id,
+				currentAmount,
+				cashBox.business_date,
+				`Saldo pendiente de ${cashBox.name}`,
+				now,
+				now
+			).run();
+
+			console.log('⚠️ Saldo pendiente creado:', { amount: currentAmount, id: pendingBalanceId });
+		}
+
+		console.log('✅ Caja cerrada exitosamente en D1');
+		return { success: true };
+	} catch (error) {
+		console.error('❌ closeCashBox D1: Error:', error);
+		return { success: false, error: 'Error al cerrar la caja' };
+	}
 }
 
 export async function reopenCashBox(
@@ -272,11 +507,44 @@ export async function reopenCashBox(
 		return { success: true };
 	}
 	
-	return await executeMutation(
-		db,
-		'UPDATE cash_boxes SET status = ?, estado = ?, reopened_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?',
-		['open', 'reaperturado', reopenedAt, id, 'closed']
-	);
+	try {
+		console.log('🔄 reopenCashBox D1: Reabriendo caja', { id, reopenedAt, options });
+		
+		// Verificar que la caja existe y está cerrada
+		const cashBox = await db.prepare(`
+			SELECT id, status, opening_amount FROM cash_boxes WHERE id = ? AND status = 'closed'
+		`).bind(id).first();
+
+		if (!cashBox) {
+			return { success: false, error: 'Caja no encontrada o no está cerrada' };
+		}
+
+		const now = new Date().toISOString();
+		let updateQuery = 'UPDATE cash_boxes SET status = ?, reopened_at_utc = ?, updated_at_utc = ?';
+		let params = ['reopened', reopenedAt, now];
+
+		// Si es update-balance, resetear el monto actual si se solicita
+		if (options.resetCurrentAmount) {
+			updateQuery += ', opening_amount = 0';
+		}
+
+		// Agregar notas de reapertura si se proporcionan
+		if (options.allocationNote) {
+			updateQuery += ', reopen_notes = ?';
+			params.push(options.allocationNote);
+		}
+
+		updateQuery += ' WHERE id = ? AND status = ?';
+		params.push(id, 'closed');
+
+		await db.prepare(updateQuery).bind(...params).run();
+
+		console.log('✅ Caja reabierta exitosamente en D1:', { id, reopenType: options.reopenReason });
+		return { success: true };
+	} catch (error) {
+		console.error('❌ reopenCashBox D1: Error:', error);
+		return { success: false, error: 'Error al reabrir la caja' };
+	}
 }
 
 export async function updateCashBoxAmount(
@@ -294,7 +562,7 @@ export async function updateCashBoxAmount(
 	
 	return await executeMutation(
 		db,
-		'UPDATE cash_boxes SET current_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+		'UPDATE cash_boxes SET current_amount = ?, updated_at_utc = CURRENT_TIMESTAMP WHERE id = ?',
 		[amount, id]
 	);
 }

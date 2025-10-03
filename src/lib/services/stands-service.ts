@@ -1,5 +1,5 @@
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockStands, addMockStand } from '$lib/db/mock-data';
+import { mockStands, addStand } from '$lib/db/catalog-mock-data';
 
 export interface Stand {
 	id: string;
@@ -24,10 +24,20 @@ export async function getStands(platform: App.Platform): Promise<Stand[]> {
 		return mockStands as Stand[];
 	}
 	
-	return await executeQuery<Stand>(
+	const results = await executeQuery<any>(
 		db,
-		'SELECT * FROM stands ORDER BY created_at DESC'
+		'SELECT * FROM stands ORDER BY created_at_utc DESC'
 	);
+	
+	// Mapear los campos de la BD a la interfaz Stand
+	return results.map((row: any) => ({
+		id: row.id,
+		name: row.name,
+		location: row.location,
+		status: row.status,
+		createdAt: row.created_at_utc,
+		updatedAt: row.updated_at_utc
+	}));
 }
 
 export async function createStand(
@@ -39,14 +49,20 @@ export async function createStand(
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
 		console.log('Modo desarrollo: simulando creación de stand');
-		const newStand = addMockStand(data.name, data.location);
+		const newStand = addStand({
+			name: data.name,
+			location: data.location
+		});
 		return { success: true, id: newStand.id };
 	}
 	
+	const id = `stand-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+	const now = new Date().toISOString();
+	
 	return await executeMutation(
 		db,
-		'INSERT INTO stands (name, location, status) VALUES (?, ?, ?)',
-		[data.name, data.location, data.status || 'active']
+		'INSERT INTO stands (id, name, location, status, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?)',
+		[id, data.name, data.location, data.status || 'active', now, now]
 	);
 }
 
@@ -76,7 +92,8 @@ export async function updateStand(
 		return { success: true };
 	}
 
-	updates.push('updated_at = CURRENT_TIMESTAMP');
+	updates.push('updated_at_utc = ?');
+	params.push(new Date().toISOString());
 	params.push(id);
 
 	return await executeMutation(
@@ -91,9 +108,26 @@ export async function deleteStand(
 	id: string
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
-	return await executeMutation(
+	
+	// Si no hay base de datos (desarrollo local), simular éxito
+	if (!db) {
+		console.log('⚠️ deleteStand: No hay BD, simulando éxito');
+		return { success: true };
+	}
+	
+	console.log('🗑️ deleteStand: Eliminando stand con ID:', id);
+	
+	const result = await executeMutation(
 		db,
 		'DELETE FROM stands WHERE id = ?',
 		[id]
 	);
+	
+	if (!result.success) {
+		console.error('❌ deleteStand: Error eliminando stand:', result.error);
+		return result;
+	}
+	
+	console.log('✅ deleteStand: Stand eliminado exitosamente');
+	return { success: true };
 }

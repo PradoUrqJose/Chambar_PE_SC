@@ -167,7 +167,9 @@
 			// Preparar datos de la operación
 			const operationData: any = {
 				...formData,
-				attachments: attachments.length > 0 ? attachments : undefined
+				attachments: attachments.length > 0 ? attachments : undefined,
+				image: attachments.length > 0 ? attachments[0].id : undefined, // Mantener para compatibilidad
+				attachmentsJson: attachments.length > 0 ? JSON.stringify(attachments) : undefined // Nuevo campo para múltiples archivos
 			};
 
 			// Si estamos editando, agregar el ID

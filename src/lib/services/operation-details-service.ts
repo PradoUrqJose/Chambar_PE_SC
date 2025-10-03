@@ -1,19 +1,20 @@
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockOperationDetails, addMockOperationDetail } from '$lib/db/mock-data';
+import { mockOperationDetails, addOperationDetail } from '$lib/db/catalog-mock-data';
 
 export interface OperationDetail {
 	id: string;
 	name: string;
+	description?: string;
 	type: 'income' | 'expense';
-	category: string;
+	status: 'active' | 'inactive';
 	createdAt: string;
 	updatedAt: string;
 }
 
 export interface CreateOperationDetailData {
 	name: string;
+	description?: string;
 	type: 'income' | 'expense';
-	category: string;
 }
 
 export async function getOperationDetails(platform: App.Platform): Promise<OperationDetail[]> {
@@ -25,10 +26,21 @@ export async function getOperationDetails(platform: App.Platform): Promise<Opera
 		return mockOperationDetails as OperationDetail[];
 	}
 	
-	return await executeQuery<OperationDetail>(
+	const results = await executeQuery<any>(
 		db,
-		'SELECT * FROM operation_details ORDER BY created_at DESC'
+		'SELECT * FROM operation_details ORDER BY created_at_utc DESC'
 	);
+	
+	// Mapear los campos de la BD a la interfaz OperationDetail
+	return results.map((row: any) => ({
+		id: row.id,
+		name: row.name,
+		description: row.description,
+		type: row.type,
+		status: row.status,
+		createdAt: row.created_at_utc,
+		updatedAt: row.updated_at_utc
+	}));
 }
 
 export async function createOperationDetail(
@@ -40,14 +52,21 @@ export async function createOperationDetail(
 	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
 		console.log('Modo desarrollo: simulando creación de detalle de operación');
-		const newDetail = addMockOperationDetail(data.name, data.type, data.category);
+		const newDetail = addOperationDetail({
+			name: data.name,
+			type: data.type,
+			description: data.description || 'General'
+		});
 		return { success: true, id: newDetail.id };
 	}
 	
+	const id = `detail-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+	const now = new Date().toISOString();
+	
 	return await executeMutation(
 		db,
-		'INSERT INTO operation_details (name, type, category) VALUES (?, ?, ?)',
-		[data.name, data.type, data.category]
+		'INSERT INTO operation_details (id, name, description, type, status, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?, ?)',
+		[id, data.name, data.description || null, data.type, 'active', now, now]
 	);
 }
 
@@ -64,20 +83,21 @@ export async function updateOperationDetail(
 		updates.push('name = ?');
 		params.push(data.name);
 	}
+	if (data.description !== undefined) {
+		updates.push('description = ?');
+		params.push(data.description);
+	}
 	if (data.type !== undefined) {
 		updates.push('type = ?');
 		params.push(data.type);
-	}
-	if (data.category !== undefined) {
-		updates.push('category = ?');
-		params.push(data.category);
 	}
 
 	if (updates.length === 0) {
 		return { success: true };
 	}
 
-	updates.push('updated_at = CURRENT_TIMESTAMP');
+	updates.push('updated_at_utc = ?');
+	params.push(new Date().toISOString());
 	params.push(id);
 
 	return await executeMutation(
@@ -92,9 +112,26 @@ export async function deleteOperationDetail(
 	id: string
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
-	return await executeMutation(
+	
+	// Si no hay base de datos (desarrollo local), simular éxito
+	if (!db) {
+		console.log('⚠️ deleteOperationDetail: No hay BD, simulando éxito');
+		return { success: true };
+	}
+	
+	console.log('🗑️ deleteOperationDetail: Eliminando detalle de operación con ID:', id);
+	
+	const result = await executeMutation(
 		db,
 		'DELETE FROM operation_details WHERE id = ?',
 		[id]
 	);
+	
+	if (!result.success) {
+		console.error('❌ deleteOperationDetail: Error eliminando detalle de operación:', result.error);
+		return result;
+	}
+	
+	console.log('✅ deleteOperationDetail: Detalle de operación eliminado exitosamente');
+	return { success: true };
 }
