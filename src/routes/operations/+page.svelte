@@ -3,6 +3,9 @@
 	import { OperationsTable, OperationModal, ConfirmationModal, ExcelExporter } from '$lib/components';
 	import type { Operation } from '$lib/services/operations-service';
 	import { getOperationsExportOptions } from '$lib/utils/excel-export';
+	import type { PageData } from './$types';
+
+	let { data } = $props<{ data: PageData }>();
 
 	// Estado principal
 	let isLoading = $state(true);
@@ -584,6 +587,7 @@
 				defaultRowsPerPage={20}
 				showCashBoxInfo={true}
 				{cashBoxes}
+				platform={data.platform}
 				{companies}
 				{operationDetails}
 				{responsiblePersons}
@@ -610,7 +614,7 @@
 		responsiblePersons={responsiblePersons}
 		stands={stands}
 		companies={companies}
-		platform={undefined}
+		platform={data.platform}
 	/>
 {/if}
 

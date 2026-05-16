@@ -1,46 +1,33 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from "svelte";
-  import { createChart, ColorType, LineSeries, CandlestickSeries, AreaSeries } from "lightweight-charts";
-  import type { IChartApi, ISeriesApi, CandlestickData, LineData } from "lightweight-charts";
-  import { ExcelExporter, ExcelMultiSheetExporter } from "$lib/components";
-  import { getReportExportOptions, type SheetData } from "$lib/utils/excel-export";
+  import { createChart, ColorType, HistogramSeries } from "lightweight-charts";
+  import type { IChartApi, ISeriesApi } from "lightweight-charts";
 
   let { data } = $props<{ data: any }>();
 
   let isLoading = $state(true);
   let errorMessage = $state("");
-  let successMessage = $state("");
-
-  // Datos para los gráficos
+  
+  // Datos crudos
   let operations = $state<any[]>([]);
   let companies = $state<any[]>([]);
   let stands = $state<any[]>([]);
   let responsiblePersons = $state<any[]>([]);
   let operationDetails = $state<any[]>([]);
 
-  // Referencias a los contenedores de gráficos
+  // Referencia al contenedor del gráfico principal
   let mainChartContainer = $state<HTMLDivElement>();
-  let candlestickChartContainer = $state<HTMLDivElement>();
-  let incomeChartContainer = $state<HTMLDivElement>();
-  let expenseChartContainer = $state<HTMLDivElement>();
-
-  // Instancias de gráficos
   let mainChart: IChartApi | undefined;
-  let candlestickChart: IChartApi | undefined;
-  let incomeChart: IChartApi | undefined;
-  let expenseChart: IChartApi | undefined;
+  let mainSeries: ISeriesApi<"Histogram"> | undefined;
 
-  // Series de gráficos (pueden ser undefined hasta que se creen)
-  let mainSeries: ISeriesApi<"Area"> | undefined;
-  let candlestickSeries: ISeriesApi<"Candlestick"> | undefined;
-  let incomeSeries: ISeriesApi<"Area"> | undefined;
-  let expenseSeries: ISeriesApi<"Area"> | undefined;
-
-  // Datos procesados para gráficos
-  let mainChartData = $state<LineData[]>([]);
-  let candlestickData = $state<CandlestickData[]>([]);
-  let incomeData = $state<LineData[]>([]);
-  let expenseData = $state<LineData[]>([]);
+  // Datos procesados para métricas y listas
+  let mainChartData = $state<any[]>([]);
+  let distributionData = $state({
+    byCategory: [] as { name: string; value: number; percentage: number; type: 'income' | 'expense' }[],
+    byCompany: [] as { name: string; value: number; percentage: number }[],
+    byStand: [] as { name: string; value: number; percentage: number }[],
+    byResponsible: [] as { name: string; value: number; percentage: number }[]
+  });
 
   // Filtros de fecha
   let startDate = $state("");
@@ -57,833 +44,386 @@
     const today = new Date();
     const oneMonthAgo = new Date(today);
     oneMonthAgo.setMonth(today.getMonth() - 1);
-
     endDate = today.toISOString().split("T")[0];
     startDate = oneMonthAgo.toISOString().split("T")[0];
   }
 
-  // Cargar datos
+  // Cargar datos desde las APIs
   async function loadData() {
     try {
       isLoading = true;
+      let url = "/api/operations";
+      if (startDate && endDate) url += `?startDate=${startDate}&endDate=${endDate}`;
 
-      // Cargar datos desde las APIs
-      await Promise.all([loadOperations(), loadCompanies(), loadStands(), loadResponsiblePersons(), loadOperationDetails()]);
+      const [opsRes, compsRes, standsRes, respRes, detRes] = await Promise.all([
+        fetch(url),
+        fetch("/api/catalogs/companies"),
+        fetch("/api/catalogs/stands"),
+        fetch("/api/catalogs/responsible-persons"),
+        fetch("/api/catalogs/operation-details")
+      ]);
 
-      // Procesar datos para gráficos
+      if (opsRes.ok) {
+        const data = await opsRes.json();
+        operations = Array.isArray(data) ? data : data.operations || [];
+      }
+      if (compsRes.ok) companies = await compsRes.json();
+      if (standsRes.ok) stands = await standsRes.json();
+      if (respRes.ok) responsiblePersons = await respRes.json();
+      if (detRes.ok) operationDetails = await detRes.json();
+
       processChartData();
-
-      // Ya procesamos datos: permitir que el DOM muestre los contenedores de charts
-      // antes de intentar recrear las instancias.
       isLoading = false;
 
-      // Esperar a que Svelte actualice el DOM (bind:this se resuelva)
       await tick();
-
-      // Re-crear gráficas (ahora que el DOM ya está rendereado)
-      await recreateCharts();
+      recreateCharts();
     } catch (error) {
       errorMessage = "Error al cargar los datos";
-      console.error("Error loading data:", error);
+      console.error(error);
     } finally {
-      // por seguridad asegurar que isLoading quede en false
       isLoading = false;
     }
   }
 
-  // Cargar operaciones
-  async function loadOperations() {
-    try {
-      // Construir URL con parámetros de fecha si están disponibles
-      let url = "/api/operations";
-      if (startDate && endDate) {
-        url += `?startDate=${startDate}&endDate=${endDate}`;
-      }
-
-      console.log("🔍 loadOperations - URL:", url);
-      console.log("🔍 loadOperations - Fechas:", { startDate, endDate });
-
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        operations = Array.isArray(data) ? data : data.operations || [];
-        console.log("🔍 loadOperations - Operaciones cargadas:", operations.length);
-        console.log(
-          "🔍 loadOperations - Fechas de operaciones:",
-          operations.map((op) => ({
-            id: op.id,
-            businessDate: op.businessDate,
-            createdAt: op.createdAt?.split("T")[0],
-          }))
-        );
-      }
-    } catch (error) {
-      console.error("Error loading operations:", error);
-    }
-  }
-
-  // Cargar empresas
-  async function loadCompanies() {
-    try {
-      const response = await fetch("/api/catalogs/companies");
-      if (response.ok) {
-        companies = await response.json();
-      }
-    } catch (error) {
-      console.error("Error loading companies:", error);
-    }
-  }
-
-  // Cargar stands
-  async function loadStands() {
-    try {
-      const response = await fetch("/api/catalogs/stands");
-      if (response.ok) {
-        stands = await response.json();
-      }
-    } catch (error) {
-      console.error("Error loading stands:", error);
-    }
-  }
-
-  // Cargar personas responsables
-  async function loadResponsiblePersons() {
-    try {
-      const response = await fetch("/api/catalogs/responsible-persons");
-      if (response.ok) {
-        responsiblePersons = await response.json();
-      }
-    } catch (error) {
-      console.error("Error loading responsible persons:", error);
-    }
-  }
-
-  // Cargar detalles de operación
-  async function loadOperationDetails() {
-    try {
-      const response = await fetch("/api/catalogs/operation-details");
-      if (response.ok) {
-        operationDetails = await response.json();
-      }
-    } catch (error) {
-      console.error("Error loading operation details:", error);
-    }
-  }
-
-  // Procesar datos para gráficos
+  // Procesar datos para agrupaciones y rankings
   function processChartData() {
-    // Agrupar operaciones por fecha
-    const operationsByDate = operations.reduce(
-      (acc, op) => {
-        // Usar businessDate si existe, sino createdAt
-        const date = op.businessDate || op.createdAt.split("T")[0];
-        if (!acc[date]) {
-          acc[date] = { income: 0, expense: 0, operations: [] };
-        }
-        acc[date].operations.push(op);
-        if (op.type === "income") {
-          acc[date].income += op.amount;
-        } else {
-          acc[date].expense += op.amount;
-        }
-        return acc;
-      },
-      {} as Record<string, { income: number; expense: number; operations: any[] }>
-    );
+    // 1. Balance Diario (Histograma)
+    const opsByDate = operations.reduce((acc, op) => {
+      const date = op.businessDate || op.createdAt.split("T")[0];
+      if (!acc[date]) acc[date] = { income: 0, expense: 0 };
+      if (op.type === "income") acc[date].income += op.amount;
+      else acc[date].expense += op.amount;
+      return acc;
+    }, {} as Record<string, { income: number; expense: number }>);
 
-    // Usar solo datos reales de operaciones
+    const dates = Object.keys(opsByDate).sort();
+    mainChartData = dates.map(date => ({
+      time: date,
+      value: opsByDate[date].income - opsByDate[date].expense,
+      color: (opsByDate[date].income - opsByDate[date].expense) >= 0 ? '#10B981' : '#EF4444'
+    }));
 
-    const dates = Object.keys(operationsByDate).sort();
+    // 2. Gastos por Categoría
+    const byCategoryRaw = operations.filter(op => op.type === 'expense').reduce((acc, op) => {
+      const detail = operationDetails.find(d => d.id === op.operationDetailId)?.name || 'Sin categoría';
+      acc[detail] = (acc[detail] || 0) + op.amount;
+      return acc;
+    }, {} as Record<string, number>);
 
-    // Debug: Log de fechas procesadas
-    console.log("📅 Fechas procesadas:", {
-      operationsCount: operations.length,
-      datesFound: dates,
-      operationsByDate: Object.keys(operationsByDate),
-      sampleOperations: operations.slice(0, 3).map((op) => ({
-        id: op.id,
-        businessDate: op.businessDate,
-        createdAt: op.createdAt,
-        processedDate: op.businessDate || op.createdAt.split("T")[0],
-      })),
-    });
+    distributionData.byCategory = Object.entries(byCategoryRaw)
+      .map(([name, value]) => ({
+        name,
+        value,
+        type: 'expense' as const,
+        percentage: totalExpense > 0 ? (value / totalExpense) * 100 : 0
+      }))
+      .sort((a, b) => b.value - a.value);
 
-    let cumulativeIncome = 0;
-    let cumulativeExpense = 0;
+    // 3. Ingresos por Empresa
+    const byCompanyRaw = operations.filter(op => op.type === 'income').reduce((acc, op) => {
+      const company = companies.find(c => c.id === op.companyId)?.businessName || 'General';
+      acc[company] = (acc[company] || 0) + op.amount;
+      return acc;
+    }, {} as Record<string, number>);
 
-    // Datos para gráfico principal (línea de flujo de caja)
-    mainChartData = dates.map((date) => {
-      const net = operationsByDate[date].income - operationsByDate[date].expense;
-      return {
-        time: date,
-        value: net,
-      };
-    });
+    distributionData.byCompany = Object.entries(byCompanyRaw)
+      .map(([name, value]) => ({
+        name,
+        value,
+        percentage: totalIncome > 0 ? (value / totalIncome) * 100 : 0
+      }))
+      .sort((a, b) => b.value - a.value);
 
-    // Datos para gráfico de velas (OHLC por día)
-    candlestickData = dates.map((date) => {
-      const dayOps = operationsByDate[date].operations;
-      const income = operationsByDate[date].income;
-      const expense = operationsByDate[date].expense;
+    // 4. Actividad por Stand (Balance Neto por Stand)
+    const byStandRaw = operations.reduce((acc, op) => {
+      const stand = stands.find(s => s.id === op.standId)?.name || 'Sin stand';
+      if (!acc[stand]) acc[stand] = 0;
+      if (op.type === 'income') acc[stand] += op.amount;
+      else acc[stand] -= op.amount;
+      return acc;
+    }, {} as Record<string, number>);
 
-      // Simular OHLC basado en operaciones del día
-      const open = dayOps.length > 0 ? dayOps[0].amount : income * 0.8;
-      const close = income - expense;
-      const high = Math.max(income, expense, open, close) * 1.1;
-      const low = Math.min(income, expense, open, close) * 0.9;
+    distributionData.byStand = Object.entries(byStandRaw)
+      .map(([name, value]) => ({
+        name,
+        value,
+        percentage: (totalIncome + Math.abs(totalExpense)) > 0 ? (Math.abs(value) / (totalIncome + Math.abs(totalExpense))) * 100 : 0
+      }))
+      .sort((a, b) => b.value - a.value);
 
-      return {
-        time: date,
-        open: open,
-        high: high,
-        low: low,
-        close: close,
-      };
-    });
+    // 5. Ranking de Responsables
+    const byRespRaw = operations.reduce((acc, op) => {
+      const resp = responsiblePersons.find(r => r.id === op.responsiblePersonId)?.name || 'Sin asignar';
+      acc[resp] = (acc[resp] || 0) + op.amount;
+      return acc;
+    }, {} as Record<string, number>);
 
-    // Datos para gráfico de ingresos acumulados
-    incomeData = dates.map((date) => {
-      cumulativeIncome += operationsByDate[date].income;
-      return {
-        time: date,
-        value: cumulativeIncome,
-      };
-    });
-
-    // Datos para gráfico de egresos acumulados
-    expenseData = dates.map((date) => {
-      cumulativeExpense += operationsByDate[date].expense;
-      return {
-        time: date,
-        value: cumulativeExpense,
-      };
-    });
+    distributionData.byResponsible = Object.entries(byRespRaw)
+      .map(([name, value]) => ({
+        name,
+        value,
+        percentage: (totalIncome + totalExpense) > 0 ? (value / (totalIncome + totalExpense)) * 100 : 0
+      }))
+      .sort((a, b) => b.value - a.value);
   }
 
-  // Crear gráfico principal (Standard Time-based Chart)
+  // Visualización del gráfico principal
   function createMainChart() {
-    console.log("📊 createMainChart called", {
-      container: !!mainChartContainer,
-      dataLength: mainChartData.length,
-      data: mainChartData,
-    });
-
-    if (!mainChartContainer) {
-      console.log("❌ mainChartContainer no disponible");
-      return;
-    }
-
-    console.log("📏 Tamaño del contenedor:", {
-      width: mainChartContainer.clientWidth,
-      height: mainChartContainer.clientHeight,
-      offsetWidth: mainChartContainer.offsetWidth,
-      offsetHeight: mainChartContainer.offsetHeight,
-    });
+    if (!mainChartContainer || mainChartData.length === 0) return;
 
     mainChart = createChart(mainChartContainer, {
       width: mainChartContainer.clientWidth,
-      height: 400,
+      height: 350,
       layout: {
-        background: { type: ColorType.Solid, color: "white" },
-        textColor: "#333",
+        background: { type: ColorType.Solid, color: "transparent" },
+        textColor: "#64748b",
       },
       grid: {
-        vertLines: { color: "#f0f0f0" },
-        horzLines: { color: "#f0f0f0" },
+        vertLines: { visible: false },
+        horzLines: { color: "#f1f5f9" },
       },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: "#cccccc",
-      },
-      timeScale: {
-        borderColor: "#cccccc",
-        timeVisible: true,
-        secondsVisible: false,
-      },
+      timeScale: { borderColor: "#f1f5f9" }
     });
 
-    mainSeries = mainChart.addSeries(AreaSeries, {
-      lineColor: "#3b82f6",
-      lineWidth: 3, // Línea más gruesa para debug
-      title: "Flujo de Caja Diario",
-      // Agregar área con degradado azul más visible
-      topColor: "rgba(59, 130, 246, 0.8)", // Más opaco para debug
-      bottomColor: "rgba(59, 130, 246, 0.2)", // Menos transparente para debug
-    }) as ISeriesApi<"Area">;
-
-    console.log("✅ Serie principal creada:", {
-      series: !!mainSeries,
-      dataToSet: mainChartData.length,
-      data: mainChartData,
-      firstDataPoint: mainChartData[0],
-      lastDataPoint: mainChartData[mainChartData.length - 1],
+    mainSeries = mainChart.addSeries(HistogramSeries, {
+      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
     });
 
     mainSeries.setData(mainChartData);
     mainChart.timeScale().fitContent();
-
-    console.log("✅ Datos establecidos y escala ajustada");
-
-    // Verificar que el gráfico se renderice
-    setTimeout(() => {
-      if (mainChartContainer) {
-        console.log("🔍 Verificando renderizado del gráfico:", {
-          containerHasContent: mainChartContainer.children.length > 0,
-          containerInnerHTML: mainChartContainer.innerHTML.length,
-          chartExists: !!mainChart,
-        });
-      }
-    }, 500);
   }
 
-  // Crear gráfico de velas (Candlestick Chart)
-  function createCandlestickChart() {
-    if (!candlestickChartContainer) return;
-
-    candlestickChart = createChart(candlestickChartContainer, {
-      width: candlestickChartContainer.clientWidth,
-      height: 300,
-      layout: {
-        background: { type: ColorType.Solid, color: "white" },
-        textColor: "#333",
-      },
-      grid: {
-        vertLines: { color: "#f0f0f0" },
-        horzLines: { color: "#f0f0f0" },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: "#cccccc",
-      },
-      timeScale: {
-        borderColor: "#cccccc",
-        timeVisible: true,
-        secondsVisible: false,
-      },
-    });
-
-    candlestickSeries = candlestickChart.addSeries(CandlestickSeries, {
-      upColor: "#10b981",
-      downColor: "#ef4444",
-      borderVisible: false,
-      wickUpColor: "#10b981",
-      wickDownColor: "#ef4444",
-    }) as ISeriesApi<"Candlestick">;
-
-    candlestickSeries.setData(candlestickData);
-    candlestickChart.timeScale().fitContent();
+  function recreateCharts() {
+    if (mainChart) mainChart.remove();
+    createMainChart();
   }
 
-  // Crear gráfico de ingresos
-  function createIncomeChart() {
-    if (!incomeChartContainer) return;
-
-    incomeChart = createChart(incomeChartContainer, {
-      width: incomeChartContainer.clientWidth,
-      height: 250,
-      layout: {
-        background: { type: ColorType.Solid, color: "white" },
-        textColor: "#333",
-      },
-      grid: {
-        vertLines: { color: "#f0f0f0" },
-        horzLines: { color: "#f0f0f0" },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: "#cccccc",
-      },
-      timeScale: {
-        borderColor: "#cccccc",
-        timeVisible: true,
-        secondsVisible: false,
-      },
-    });
-
-    incomeSeries = incomeChart.addSeries(AreaSeries, {
-      lineColor: "#10b981",
-      lineWidth: 2,
-      title: "Ingresos Acumulados",
-      // Agregar área con degradado verde
-      topColor: "rgba(16, 185, 129, 0.3)",
-      bottomColor: "rgba(16, 185, 129, 0.0)",
-    }) as ISeriesApi<"Area">;
-
-    incomeSeries.setData(incomeData);
-    incomeChart.timeScale().fitContent();
-  }
-
-  // Crear gráfico de egresos
-  function createExpenseChart() {
-    if (!expenseChartContainer) return;
-
-    expenseChart = createChart(expenseChartContainer, {
-      width: expenseChartContainer.clientWidth,
-      height: 250,
-      layout: {
-        background: { type: ColorType.Solid, color: "white" },
-        textColor: "#333",
-      },
-      grid: {
-        vertLines: { color: "#f0f0f0" },
-        horzLines: { color: "#f0f0f0" },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: "#cccccc",
-      },
-      timeScale: {
-        borderColor: "#cccccc",
-        timeVisible: true,
-        secondsVisible: false,
-      },
-    });
-
-    expenseSeries = expenseChart.addSeries(AreaSeries, {
-      lineColor: "#ef4444",
-      lineWidth: 2,
-      title: "Egresos Acumulados",
-      // Agregar área con degradado rojo
-      topColor: "rgba(239, 68, 68, 0.3)",
-      bottomColor: "rgba(239, 68, 68, 0.0)",
-    }) as ISeriesApi<"Area">;
-
-    expenseSeries.setData(expenseData);
-    expenseChart.timeScale().fitContent();
-  }
-
-  // Redimensionar gráficos
   function resizeCharts() {
     if (mainChart && mainChartContainer) {
       mainChart.applyOptions({ width: mainChartContainer.clientWidth });
     }
-    if (candlestickChart && candlestickChartContainer) {
-      candlestickChart.applyOptions({ width: candlestickChartContainer.clientWidth });
-    }
-    if (incomeChart && incomeChartContainer) {
-      incomeChart.applyOptions({ width: incomeChartContainer.clientWidth });
-    }
-    if (expenseChart && expenseChartContainer) {
-      expenseChart.applyOptions({ width: expenseChartContainer.clientWidth });
-    }
-  }
-
-  // Eliminar instancias viejas y recrear gráficos usando los contenedores actuales
-  async function recreateCharts() {
-    console.log("recreateCharts: before remove - containers:", {
-      main: !!mainChartContainer,
-      candlestick: !!candlestickChartContainer,
-      income: !!incomeChartContainer,
-      expense: !!expenseChartContainer,
-    });
-
-    // eliminar instancias antiguas si existen
-    try {
-      if (mainChart) {
-        mainChart.remove();
-        mainChart = undefined;
-        mainSeries = undefined;
-      }
-      if (candlestickChart) {
-        candlestickChart.remove();
-        candlestickChart = undefined;
-        candlestickSeries = undefined;
-      }
-      if (incomeChart) {
-        incomeChart.remove();
-        incomeChart = undefined;
-        incomeSeries = undefined;
-      }
-      if (expenseChart) {
-        expenseChart.remove();
-        expenseChart = undefined;
-        expenseSeries = undefined;
-      }
-    } catch (err) {
-      console.warn("Error al remover charts antiguos:", err);
-    }
-
-    // esperar a que Svelte haya reinsertado los nodos en el DOM
-    await tick();
-
-    console.log("recreateCharts: after tick - containers:", {
-      main: !!mainChartContainer,
-      candlestick: !!candlestickChartContainer,
-      income: !!incomeChartContainer,
-      expense: !!expenseChartContainer,
-    });
-
-    // crear de nuevo los charts con los datos ya procesados
-    createMainChart();
-    createCandlestickChart();
-    createIncomeChart();
-    createExpenseChart();
-  }
-
-  // Preparar datos para exportación
-  function getOperationsForExport() {
-    return operations.map((op) => ({
-      ...op,
-      type: op.type === "income" ? "Ingreso" : "Egreso",
-      amount: `${op.type === "income" ? "+" : "-"}S/. ${op.amount.toFixed(2)}`,
-      createdAt: new Date(op.createdAt).toLocaleDateString("es-PE"),
-      attachments: op.attachments && op.attachments.length > 0 ? `${op.attachments.length} archivo(s)` : "Sin archivos",
-    }));
-  }
-
-  // Preparar datos para exportación múltiple
-  function getMultiSheetData(): SheetData[] {
-    return [
-      {
-        name: "Operaciones",
-        data: getOperationsForExport(),
-        columns: [
-          { key: "type", label: "Tipo", type: "text" as const },
-          { key: "description", label: "Descripción", type: "text" as const },
-          { key: "amount", label: "Monto", type: "text" as const },
-          { key: "createdAt", label: "Fecha", type: "date" as const },
-          { key: "attachments", label: "Archivos", type: "text" as const },
-        ],
-      },
-      {
-        name: "Empresas",
-        data: companies,
-        columns: [
-          { key: "razonSocial", label: "Razón Social", type: "text" as const },
-          { key: "ruc", label: "RUC", type: "text" as const },
-          { key: "status", label: "Estado", type: "text" as const },
-        ],
-      },
-      {
-        name: "Stands",
-        data: stands,
-        columns: [
-          { key: "name", label: "Nombre", type: "text" as const },
-          { key: "location", label: "Ubicación", type: "text" as const },
-          { key: "status", label: "Estado", type: "text" as const },
-        ],
-      },
-      {
-        name: "Responsables",
-        data: responsiblePersons,
-        columns: [
-          { key: "name", label: "Nombre", type: "text" as const },
-          { key: "email", label: "Email", type: "email" as const },
-          { key: "phone", label: "Teléfono", type: "phone" as const },
-          { key: "status", label: "Estado", type: "text" as const },
-        ],
-      },
-    ];
   }
 
   onMount(async () => {
     initializeDates();
     await loadData();
-
-    // Redimensionar en resize
-    if (typeof window !== "undefined") {
-      window.addEventListener("resize", resizeCharts);
-    }
+    window.addEventListener("resize", resizeCharts);
   });
 
   onDestroy(() => {
     if (mainChart) mainChart.remove();
-    if (candlestickChart) candlestickChart.remove();
-    if (incomeChart) incomeChart.remove();
-    if (expenseChart) expenseChart.remove();
-    if (typeof window !== "undefined") {
-      window.removeEventListener("resize", resizeCharts);
-    }
-  });
-
-  // Actualizar datos de gráficos cuando cambien las operaciones
-  $effect(() => {
-    if (operations.length > 0 && mainSeries && candlestickSeries && incomeSeries && expenseSeries) {
-      // Procesar datos sin modificar variables de estado
-      const operationsByDate = operations.reduce(
-        (acc, op) => {
-          const date = op.businessDate || op.createdAt.split("T")[0];
-          if (!acc[date]) {
-            acc[date] = { income: 0, expense: 0, operations: [] };
-          }
-          acc[date].operations.push(op);
-          if (op.type === "income") {
-            acc[date].income += op.amount;
-          } else {
-            acc[date].expense += op.amount;
-          }
-          return acc;
-        },
-        {} as Record<string, { income: number; expense: number; operations: any[] }>
-      );
-
-      const dates = Object.keys(operationsByDate).sort();
-      let cumulativeIncome = 0;
-      let cumulativeExpense = 0;
-
-      // Datos para gráfico principal
-      const mainData = dates.map((date) => {
-        const net = operationsByDate[date].income - operationsByDate[date].expense;
-        return { time: date, value: net };
-      });
-
-      // Datos para gráfico de velas
-      const candlestickData = dates.map((date) => {
-        const income = operationsByDate[date].income;
-        const expense = operationsByDate[date].expense;
-        return {
-          time: date,
-          open: 0,
-          high: income,
-          low: -expense,
-          close: income - expense,
-        };
-      });
-
-      // Datos para ingresos acumulados
-      const incomeData = dates.map((date) => {
-        cumulativeIncome += operationsByDate[date].income;
-        return { time: date, value: cumulativeIncome };
-      });
-
-      // Datos para egresos acumulados
-      const expenseData = dates.map((date) => {
-        cumulativeExpense += operationsByDate[date].expense;
-        return { time: date, value: cumulativeExpense };
-      });
-
-      // Actualizar series
-      mainSeries.setData(mainData);
-      candlestickSeries.setData(candlestickData);
-      incomeSeries.setData(incomeData);
-      expenseSeries.setData(expenseData);
-
-      // Ajustar escalas
-      if (mainChart) mainChart.timeScale().fitContent();
-      if (candlestickChart) candlestickChart.timeScale().fitContent();
-      if (incomeChart) incomeChart.timeScale().fitContent();
-      if (expenseChart) expenseChart.timeScale().fitContent();
-    }
+    window.removeEventListener("resize", resizeCharts);
   });
 </script>
 
 <svelte:head>
-  <title>Reportes - Chambar</title>
+  <title>Análisis de Negocio - Chambar</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-50">
+<div class="min-h-screen bg-gray-50/50">
   <div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <!-- Header -->
-    <div class="mb-8">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    
+    <!-- Header Premium -->
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
         <div>
-          <h1 class="text-3xl font-bold text-gray-900">Reportes</h1>
-          <p class="mt-2 text-gray-600">Análisis y reportes del sistema de gestión de caja</p>
+          <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Análisis de Negocio</h1>
+          <p class="mt-1 text-gray-500 font-medium">Visualiza el rendimiento financiero de tus operaciones</p>
         </div>
-        <div class="flex items-center gap-4">
+        
+        <div class="flex flex-wrap items-center gap-3 bg-gray-50 p-2 rounded-xl border border-gray-200/50">
           <div class="flex items-center gap-2">
-            <label for="startDate" class="text-sm font-medium text-gray-700">Desde:</label>
-            <input
-              type="date"
-              id="startDate"
-              bind:value={startDate}
-              class="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div class="flex items-center gap-2">
-            <label for="endDate" class="text-sm font-medium text-gray-700">Hasta:</label>
-            <input
-              type="date"
-              id="endDate"
-              bind:value={endDate}
-              class="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+            <span class="text-xs font-bold text-gray-400 uppercase ml-2">Periodo</span>
+            <input type="date" bind:value={startDate} class="bg-white px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none" />
+            <span class="text-gray-400">→</span>
+            <input type="date" bind:value={endDate} class="bg-white px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
           <button
-            on:click={async () => {
-              await loadData();
-            }}
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+            onclick={loadData}
+            class="px-5 py-2 bg-gray-900 text-white text-sm font-bold rounded-lg hover:bg-black transition-all shadow-sm active:scale-95"
           >
             Filtrar
           </button>
         </div>
       </div>
     </div>
+
+    {#if isLoading}
+      <div class="flex flex-col items-center justify-center py-32">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-b-blue-600"></div>
+        <p class="mt-4 text-gray-500 font-bold animate-pulse tracking-wider uppercase text-xs">Cargando Inteligencia...</p>
+      </div>
+    {:else}
+      <!-- Métricas en Tarjetas -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <!-- Ingresos -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 group hover:border-green-200 transition-all">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Ingresos Totales</p>
+              <p class="text-3xl font-black text-green-600">S/. {totalIncome.toLocaleString('es-PE', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div class="p-3 bg-green-50 rounded-xl group-hover:rotate-12 transition-transform">
+              <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Egresos -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 group hover:border-red-200 transition-all">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Egresos Totales</p>
+              <p class="text-3xl font-black text-red-600">S/. {totalExpense.toLocaleString('es-PE', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div class="p-3 bg-red-50 rounded-xl group-hover:rotate-12 transition-transform">
+              <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Balance -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 group hover:border-blue-200 transition-all">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Balance Neto</p>
+              <p class="text-3xl font-black {netProfit >= 0 ? 'text-blue-600' : 'text-red-600'}">S/. {netProfit.toLocaleString('es-PE', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div class="p-3 bg-blue-50 rounded-xl group-hover:rotate-12 transition-transform">
+              <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Volumen -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 group hover:border-purple-200 transition-all">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Volumen</p>
+              <p class="text-3xl font-black text-purple-600">{totalOperations}</p>
+              <p class="text-[10px] font-bold text-gray-400 uppercase">Operaciones</p>
+            </div>
+            <div class="p-3 bg-purple-50 rounded-xl group-hover:rotate-12 transition-transform">
+              <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráfico Principal (Daily Balance) -->
+      <div class="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-8">
+        <div class="flex items-center gap-3 mb-8">
+          <div class="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+          </div>
+          <h3 class="text-xl font-black text-gray-900">Balance de Operaciones Diarias</h3>
+        </div>
+        <div bind:this={mainChartContainer} class="w-full h-80"></div>
+      </div>
+
+      <!-- Análisis de Distribución (Barras de Progreso) -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Gastos por Detalle -->
+        <div class="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+          <h3 class="text-xl font-black text-gray-900 mb-6 flex items-center justify-between">
+            Distribución de Gastos
+            <span class="text-xs bg-red-50 text-red-600 px-3 py-1 rounded-full uppercase tracking-tighter">Por Categoría</span>
+          </h3>
+          <div class="space-y-6">
+            {#each distributionData.byCategory.slice(0, 6) as cat}
+              <div>
+                <div class="flex justify-between items-end mb-2">
+                  <span class="text-sm font-bold text-gray-700">{cat.name}</span>
+                  <span class="text-xs font-black text-red-600">S/. {cat.value.toFixed(2)} ({cat.percentage.toFixed(1)}%)</span>
+                </div>
+                <div class="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-red-500 rounded-full transition-all duration-1000" style="width: {cat.percentage}%"></div>
+                </div>
+              </div>
+            {:else}
+              <div class="py-12 text-center text-gray-400 italic">No se encontraron egresos en este periodo</div>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Ingresos por Empresa -->
+        <div class="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+          <h3 class="text-xl font-black text-gray-900 mb-6 flex items-center justify-between">
+            Concentración de Ingresos
+            <span class="text-xs bg-green-50 text-green-600 px-3 py-1 rounded-full uppercase tracking-tighter">Por Empresa</span>
+          </h3>
+          <div class="space-y-6">
+            {#each distributionData.byCompany.slice(0, 6) as comp}
+              <div>
+                <div class="flex justify-between items-end mb-2">
+                  <span class="text-sm font-bold text-gray-700">{comp.name}</span>
+                  <span class="text-xs font-black text-green-600">S/. {comp.value.toFixed(2)} ({comp.percentage.toFixed(1)}%)</span>
+                </div>
+                <div class="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-green-500 rounded-full transition-all duration-1000" style="width: {comp.percentage}%"></div>
+                </div>
+              </div>
+            {:else}
+              <div class="py-12 text-center text-gray-400 italic">No se encontraron ingresos en este periodo</div>
+            {/each}
+          </div>
+        </div>
+      </div>
+
+      <!-- Rankings Finales -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Top Responsables -->
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="p-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+            <h3 class="text-lg font-black text-gray-900">Top Responsables</h3>
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+          </div>
+          <div class="divide-y divide-gray-50">
+            {#each distributionData.byResponsible.slice(0, 5) as resp, i}
+              <div class="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div class="flex items-center gap-4">
+                  <span class="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-[10px] font-black text-gray-400">{i + 1}</span>
+                  <span class="text-sm font-bold text-gray-700">{resp.name}</span>
+                </div>
+                <span class="text-sm font-black text-blue-600">S/. {resp.value.toLocaleString()}</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Top Stands -->
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="p-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+            <h3 class="text-lg font-black text-gray-900">Actividad por Stand</h3>
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+          </div>
+          <div class="divide-y divide-gray-50">
+            {#each distributionData.byStand.slice(0, 5) as stand, i}
+              <div class="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div class="flex items-center gap-4">
+                  <span class="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-[10px] font-black text-gray-400">{i + 1}</span>
+                  <span class="text-sm font-bold text-gray-700">{stand.name}</span>
+                </div>
+                <span class="text-sm font-black text-purple-600">S/. {stand.value.toLocaleString()}</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
-  <!-- Mensajes de feedback -->
-  {#if errorMessage}
-    <div class="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-      <div class="flex">
-        <svg class="w-5 h-5 text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        {errorMessage}
-      </div>
-    </div>
-  {/if}
-
-  {#if successMessage}
-    <div class="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md">
-      <div class="flex">
-        <svg class="w-5 h-5 text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        {successMessage}
-      </div>
-    </div>
-  {/if}
-
-  {#if isLoading}
-    <div class="flex items-center justify-center py-12">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-      <span class="ml-2 text-gray-600">Cargando reportes...</span>
-    </div>
-  {:else}
-    <!-- Métricas principales -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      <div class="bg-white p-6 rounded-lg shadow-sm border">
-        <div class="flex items-center">
-          <div class="p-2 bg-green-100 rounded-lg">
-            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12" />
-            </svg>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Ingresos Totales</p>
-            <p class="text-2xl font-bold text-green-600">S/. {totalIncome.toFixed(2)}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white p-6 rounded-lg shadow-sm border">
-        <div class="flex items-center">
-          <div class="p-2 bg-red-100 rounded-lg">
-            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 13l-5 5m0 0l-5-5m5 5V6" />
-            </svg>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Egresos Totales</p>
-            <p class="text-2xl font-bold text-red-600">S/. {totalExpense.toFixed(2)}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white p-6 rounded-lg shadow-sm border">
-        <div class="flex items-center">
-          <div class="p-2 bg-blue-100 rounded-lg">
-            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-              />
-            </svg>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Beneficio Neto</p>
-            <p class="text-2xl font-bold {netProfit >= 0 ? 'text-green-600' : 'text-red-600'}">
-              S/. {netProfit.toFixed(2)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white p-6 rounded-lg shadow-sm border">
-        <div class="flex items-center">
-          <div class="p-2 bg-purple-100 rounded-lg">
-            <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
-              />
-            </svg>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Total Operaciones</p>
-            <p class="text-2xl font-bold text-purple-600">{totalOperations}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Gráfico principal (Standard Time-based Chart) -->
-    <div class="bg-white p-6 rounded-lg shadow-sm border mb-8">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Flujo de Caja Diario</h3>
-      {#if operations.length === 0}
-        <div class="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-md">
-          <div class="flex">
-            <svg class="w-5 h-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <div>
-              <p class="text-sm text-gray-700">
-                <strong>No hay operaciones:</strong> Realiza operaciones en el sistema de caja para ver los gráficos.
-              </p>
-            </div>
-          </div>
-        </div>
-      {/if}
-      <div bind:this={mainChartContainer} class="w-full h-96" style="min-height: 400px; background-color: #f9fafb; border: 1px solid #e5e7eb;"></div>
-    </div>
-
-    <!-- Gráfico de velas (Candlestick Chart) -->
-    <div class="bg-white p-6 rounded-lg shadow-sm border mb-8">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Análisis de Velas por Día</h3>
-      {#if operations.length === 0}
-        <div class="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-md">
-          <div class="flex">
-            <svg class="w-5 h-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-              ></path>
-            </svg>
-            <div>
-              <p class="text-sm text-gray-700">
-                <strong>No hay operaciones:</strong> Realiza operaciones en el sistema de caja para ver los gráficos.
-              </p>
-            </div>
-          </div>
-        </div>
-      {/if}
-      <div bind:this={candlestickChartContainer} class="w-full h-80" style="min-height: 320px; background-color: #f9fafb; border: 1px solid #e5e7eb;"></div>
-    </div>
-
-    <!-- Gráficos secundarios -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-      <!-- Gráfico de Ingresos -->
-      <div class="bg-white p-6 rounded-lg shadow-sm border">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Evolución de Ingresos</h3>
-        <div bind:this={incomeChartContainer} class="w-full h-64" style="min-height: 256px; background-color: #f9fafb; border: 1px solid #e5e7eb;"></div>
-      </div>
-
-      <!-- Gráfico de Egresos -->
-      <div class="bg-white p-6 rounded-lg shadow-sm border">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Evolución de Egresos</h3>
-        <div bind:this={expenseChartContainer} class="w-full h-64" style="min-height: 256px; background-color: #f9fafb; border: 1px solid #e5e7eb;"></div>
-      </div>
-    </div>
-  {/if}
 </div>
 
 <style>
-  /* Estilos para los gráficos de TradingView */
   :global(.tv-lightweight-charts) {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: 'Inter', sans-serif !important;
   }
 </style>

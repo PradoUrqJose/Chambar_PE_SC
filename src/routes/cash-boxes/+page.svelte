@@ -21,8 +21,8 @@
 	let cashBoxes = $state<CashBox[]>([]);
 	let operations = $state<Operation[]>([]);
 	let errorMessage = $state('');
-	
-	// Estados de UI
+	let isDeletingOperation = $state(false);
+	let successMessage = $state('');
 	let showOpenForm = $state(false);
 	let openingAmount = $state(0);
 	let currentOpenCashBox = $state<CashBox | null>(null);
@@ -46,7 +46,6 @@
 	let showDeleteModal = $state(false);
 	let selectedOperation = $state<Operation | null>(null);
 	let operationToDelete = $state<Operation | null>(null);
-	let successMessage = $state('');
 	
 	// Estados para tabla
 	let rowsPerPage = $state(5);
@@ -88,8 +87,9 @@
 			return acc + (op.type === 'income' ? op.amount : -op.amount);
 		}, 0);
 		
-		// NO sumar openingAmount - ya está incluido en las operaciones de apertura
-		return total;
+		// Sumar el monto de apertura de la caja
+		const openingAmount = cashBox.openingAmount || 0;
+		return total + openingAmount;
 	}
 
 	// Caja para la fecha actual (derivado del estado)
@@ -143,6 +143,10 @@
 	async function navigateDate(date: Date) {
 		currentDate = date;
 		updateNavigationState();
+		
+		// Limpiar operaciones para evitar mostrar datos stale
+		operations = [];
+		isLoading = true;
 		
 		// Asegurar que existe la caja para la nueva fecha
 		await loadCashBoxes();
@@ -541,6 +545,7 @@
 		if (!operationToDelete) return;
 
 		try {
+			isDeletingOperation = true;
 			const response = await fetch(`/api/operations/${operationToDelete.id}`, {
 				method: 'DELETE'
 			});
@@ -557,6 +562,7 @@
 			console.error('Error deleting operation:', error);
 			errorMessage = 'Error de red al eliminar la operación';
 		} finally {
+			isDeletingOperation = false;
 			showDeleteModal = false;
 			operationToDelete = null;
 		}
@@ -621,6 +627,17 @@
 
 		} catch (error) {
 			isLoading = false; // Asegurar que se quite el loading incluso si hay error
+		}
+	});
+
+	// Efecto para auto-cerrar mensajes de éxito y error después de 5 segundos
+	$effect(() => {
+		if (errorMessage || successMessage) {
+			const timer = setTimeout(() => {
+				errorMessage = '';
+				successMessage = '';
+			}, 5000);
+			return () => clearTimeout(timer);
 		}
 	});
 
@@ -883,6 +900,7 @@ function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance
 					onEditOperation={handleEditOperation}
 					onDeleteOperation={handleDeleteOperation}
 					showActions={true}
+					platform={data.platform}
 					{companies}
 					{operationDetails}
 					{responsiblePersons}
@@ -995,6 +1013,7 @@ function handleReopenRequest(cashBox: CashBox, type: 'default' | 'update-balance
 			message="¿Estás seguro de que quieres eliminar esta operación? Esta acción no se puede deshacer."
 			confirmText="Eliminar"
 			cancelText="Cancelar"
+			isSubmitting={isDeletingOperation}
 			onConfirm={confirmDelete}
 			onCancel={() => {
 				showDeleteModal = false;

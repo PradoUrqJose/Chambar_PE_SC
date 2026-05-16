@@ -2,11 +2,22 @@ import type { D1Database } from '@cloudflare/workers-types';
 
 export function getD1Database(platform: App.Platform): D1Database {
 	if (!platform?.env?.DB) {
-		// En desarrollo local, usar datos mock
-		console.warn('D1 database not available, using mock data');
-		return null as any;
+		throw new Error('D1 binding DB not found. Ensure you are running with --remote or a valid local D1 binding.');
 	}
 	return platform.env.DB;
+}
+
+function mapDbRowToCamelCase(row: any): any {
+	if (!row || typeof row !== 'object') return row;
+	const result: Record<string, any> = {};
+	for (const key of Object.keys(row)) {
+		// Strip _utc suffix from timestamps
+		const cleanKey = key.replace(/_utc$/, '');
+		// Convert snake_case to camelCase
+		const camelKey = cleanKey.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+		result[camelKey] = row[key];
+	}
+	return result;
 }
 
 export async function executeQuery<T = any>(
@@ -16,7 +27,7 @@ export async function executeQuery<T = any>(
 ): Promise<T[]> {
 	try {
 		const result = await db.prepare(query).bind(...params).all();
-		return result.results as T[];
+		return result.results.map(mapDbRowToCamelCase) as T[];
 	} catch (error) {
 		console.error('Database query error:', error);
 		throw error;

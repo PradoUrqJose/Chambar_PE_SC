@@ -32,8 +32,8 @@ export async function generateThumbnail(
 		format = config.THUMBNAIL_FORMAT
 	} = options;
 
-	// En desarrollo, simular thumbnail
-	if (!platform?.env?.ATTACHMENTS) {
+	// En desarrollo, simular thumbnail (si no hay bucket de adjuntos ni hash de cuenta de Cloudflare)
+	if (!platform?.env?.ATTACHMENTS && !platform?.env?.CLOUDFLARE_ACCOUNT_HASH) {
 		if (config.LOG_THUMBNAIL_GENERATION) {
 			console.log('🖼️ [DEV] Simulando generación de thumbnail para:', imageUrl);
 			console.log('📐 [DEV] Dimensiones:', `${width}x${height}`);

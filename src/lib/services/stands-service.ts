@@ -1,5 +1,5 @@
+
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockStands, addMockStand } from '$lib/db/mock-data';
 
 export interface Stand {
 	id: string;
@@ -19,14 +19,14 @@ export interface CreateStandData {
 export async function getStands(platform: App.Platform): Promise<Stand[]> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), usar datos mock
+	// Se requiere base de datos
 	if (!db) {
-		return mockStands as Stand[];
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	return await executeQuery<Stand>(
 		db,
-		'SELECT * FROM stands ORDER BY created_at DESC'
+		'SELECT * FROM stands ORDER BY created_at_utc DESC'
 	);
 }
 
@@ -36,18 +36,18 @@ export async function createStand(
 ): Promise<{ success: boolean; id?: string; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('Modo desarrollo: simulando creación de stand');
-		const newStand = addMockStand(data.name, data.location);
-		return { success: true, id: newStand.id };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
-	return await executeMutation(
+	const id = crypto.randomUUID();
+	const result = await executeMutation(
 		db,
-		'INSERT INTO stands (name, location, status) VALUES (?, ?, ?)',
-		[data.name, data.location, data.status || 'active']
+		'INSERT INTO stands (id, name, location, status, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?)',
+		[id, data.name, data.location, data.status || 'active', new Date().toISOString(), new Date().toISOString()]
 	);
+	return { ...result, id };
 }
 
 export async function updateStand(
@@ -76,7 +76,7 @@ export async function updateStand(
 		return { success: true };
 	}
 
-	updates.push('updated_at = CURRENT_TIMESTAMP');
+	updates.push('updated_at_utc = CURRENT_TIMESTAMP');
 	params.push(id);
 
 	return await executeMutation(

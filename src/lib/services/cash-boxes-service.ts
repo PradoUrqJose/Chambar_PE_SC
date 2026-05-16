@@ -1,12 +1,6 @@
+
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import {
-	mockCashBoxes,
-	updateMockCashBoxStatus,
-	addMockCashBox,
-	findLastPendingBalance,
-	markPendingBalanceAsHandled,
-	transferPendingBalanceToCurrentBox
-} from '$lib/db/mock-data';
+// Removed mock data imports
 
 // Enum unificado para estados de caja
 export type CashBoxStatus = 'empty' | 'open' | 'closed' | 'reopened';
@@ -19,6 +13,7 @@ export interface CashBox {
 	openedAt: string | null;
 	closedAt: string | null;
 	reopenedAt: string | null;
+	originalOpenedAt: string | null;
 	businessDate: string; // Business date en zona horaria de Perú (YYYY-MM-DD)
 	createdAt: string;
 	updatedAt: string;
@@ -50,30 +45,14 @@ export interface ReopenCashBoxOptions {
 export async function getCashBoxes(platform: App.Platform): Promise<CashBox[]> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), usar datos mock
+	// Se requiere base de datos
 	if (!db) {
-		// Crear una copia fresca de los datos
-		const freshData = mockCashBoxes.map(cb => ({
-			id: cb.id,
-			name: cb.name,
-			status: cb.status as CashBoxStatus,
-			openingAmount: cb.openingAmount,
-			openedAt: cb.openedAt,
-			closedAt: cb.closedAt,
-			reopenedAt: cb.reopenedAt,
-			businessDate: cb.businessDate,
-			createdAt: cb.createdAt,
-			updatedAt: cb.updatedAt
-		}));
-		
-		console.log('🔍 getCashBoxes - mockCashBoxes.length:', mockCashBoxes.length);
-		console.log('🔍 getCashBoxes - returning freshData:', freshData);
-		return freshData;
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	return await executeQuery<CashBox>(
 		db,
-		'SELECT * FROM cash_boxes ORDER BY created_at DESC'
+		'SELECT * FROM cash_boxes ORDER BY created_at_utc DESC'
 	);
 }
 
@@ -83,19 +62,18 @@ export async function createCashBox(
 ): Promise<{ success: boolean; id?: string; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('📦 Modo desarrollo: creando caja mock', data);
-		const newCashBox = addMockCashBox(data.businessDate, data.name);
-		console.log('✅ Caja mock creada:', newCashBox);
-		return { success: true, id: newCashBox.id };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
-	return await executeMutation(
+	const id = crypto.randomUUID();
+	const result = await executeMutation(
 		db,
-		'INSERT INTO cash_boxes (name, business_date) VALUES (?, ?)',
-		[data.name, data.businessDate]
+		'INSERT INTO cash_boxes (id, name, status, business_date, created_at_utc, updated_at_utc) VALUES (?, ?, \'empty\', ?, ?, ?)',
+		[id, data.name, data.businessDate, new Date().toISOString(), new Date().toISOString()]
 	);
+	return { ...result, id };
 }
 
 export async function getPendingBalance(
@@ -105,12 +83,15 @@ export async function getPendingBalance(
 	const db = getD1Database(platform);
 
 	if (!db) {
-		const pending = findLastPendingBalance(currentDate);
-		return pending ? { ...pending } : null;
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 
-	// TODO: Implementar consulta real a D1 cuando esté disponible
-	return null;
+	const results = await executeQuery<PendingBalanceData>(
+		db,
+		'SELECT * FROM pending_balances WHERE status = ? AND date < ? ORDER BY date DESC LIMIT 1',
+		['pending', currentDate]
+	);
+	return results.length > 0 ? results[0] : null;
 }
 
 export async function handlePendingBalanceAction(
@@ -125,23 +106,48 @@ export async function handlePendingBalanceAction(
 	const db = getD1Database(platform);
 
 	if (!db) {
-		if (action === 'transfer') {
-			if (!data.currentCashBoxId) {
-				return { success: false, error: 'currentCashBoxId es requerido para transferir' };
-			}
-			return transferPendingBalanceToCurrentBox(data.pendingBalanceId, data.currentCashBoxId);
-		}
-
-		const result = markPendingBalanceAsHandled(
-			data.pendingBalanceId,
-			action === 'return' ? 'returned' : 'handled',
-			data.notes
-		);
-		return result.success ? { success: true } : { success: false, error: result.error };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 
-	// TODO: Implementar lógica real contra D1
-	return { success: false, error: 'Pending balance actions not implemented for D1 yet' };
+	const pendingQuery = await executeQuery<{ amount: number; cashBoxId: string }>(
+		db,
+		'SELECT amount, cash_box_id FROM pending_balances WHERE id = ?',
+		[data.pendingBalanceId]
+	);
+
+	if (pendingQuery.length === 0) {
+		return { success: false, error: 'Pending balance not found' };
+	}
+
+	const pendingInfo = pendingQuery[0];
+	const targetStatus = action === 'transfer' ? 'transferred' : (action === 'return' ? 'returned' : 'handled');
+
+	await executeMutation(
+		db,
+		'UPDATE pending_balances SET status = ?, notes = ?, handled_at_utc = CURRENT_TIMESTAMP, updated_at_utc = CURRENT_TIMESTAMP WHERE id = ?',
+		[targetStatus, data.notes || null, data.pendingBalanceId]
+	);
+
+	if (action === 'transfer' && data.currentCashBoxId) {
+		const opId = crypto.randomUUID();
+		await executeMutation(
+			db,
+			'INSERT INTO operations (id, type, amount, description, cash_box_id, created_at_utc, updated_at_utc, business_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, (SELECT business_date FROM cash_boxes WHERE id = ?))',
+			[opId, 'income', pendingInfo.amount, `Transferencia de caja: ${data.notes || ''}`, data.currentCashBoxId, data.currentCashBoxId]
+		);
+		await executeMutation(
+			db,
+			'UPDATE cash_boxes SET current_amount = current_amount + ?, opening_amount = opening_amount + ? WHERE id = ?',
+			[pendingInfo.amount, pendingInfo.amount, data.currentCashBoxId]
+		);
+	}
+
+	return { 
+		success: true, 
+		amount: pendingInfo.amount, 
+		originalCashBoxId: pendingInfo.cashBoxId, 
+		currentCashBoxId: data.currentCashBoxId 
+	};
 }
 
 export async function openCashBox(
@@ -153,35 +159,9 @@ export async function openCashBox(
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('📦 Modo desarrollo: abriendo caja', { id, openingAmount, estado });
-		updateMockCashBoxStatus(id, estado === 'reaperturado' ? 'reopened' : 'open', openingAmount, openedAt);
-		
-		// Crear operación de apertura de caja si hay monto inicial
-		if (openingAmount > 0) {
-			const { addMockOperation } = await import('$lib/db/mock-data');
-			const cashBox = mockCashBoxes.find(cb => cb.id === id);
-			if (cashBox) {
-				// Crear operación de apertura de caja
-				const description = `Apertura de caja - Monto inicial`;
-				
-				addMockOperation({
-					type: 'income',
-					amount: openingAmount,
-					description: description,
-					cashBoxId: id,
-					companyId: null,
-					operationDetailId: null,
-					responsiblePersonId: null,
-					standId: null
-				});
-				console.log('💰 Operación de apertura creada con monto:', openingAmount);
-			}
-		}
-		
-		console.log('✅ Caja abierta exitosamente');
-		return { success: true };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	const openTime = openedAt || new Date().toISOString();
@@ -189,8 +169,8 @@ export async function openCashBox(
 	
 	return await executeMutation(
 		db,
-		'UPDATE cash_boxes SET status = ?, estado = ?, opening_amount = ?, current_amount = ?, opened_at = ?, reopened_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-		['open', estado, openingAmount, openingAmount, openTime, reopenedTime, id]
+		'UPDATE cash_boxes SET status = ?, opening_amount = ?, current_amount = ?, opened_at_utc = ?, reopened_at_utc = ?, original_opened_at_utc = COALESCE(original_opened_at_utc, ?), updated_at_utc = CURRENT_TIMESTAMP WHERE id = ?',
+		['open', openingAmount, openingAmount, openTime, reopenedTime, openTime, id]
 	);
 }
 
@@ -200,45 +180,32 @@ export async function closeCashBox(
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('🔒 Modo desarrollo: cerrando caja', id);
-		updateMockCashBoxStatus(id, 'closed');
-		
-		// Crear operación de cierre de caja
-		const { addMockOperation, mockOperations } = await import('$lib/db/mock-data');
-		const cashBox = mockCashBoxes.find(cb => cb.id === id);
-		if (cashBox) {
-			// Calcular el saldo final antes del cierre
-			const operationsForBox = mockOperations.filter(op => op.cashBoxId === id);
-			const currentAmount = operationsForBox.reduce((acc, op) => {
-				return acc + (op.type === 'income' ? op.amount : -op.amount);
-			}, 0);
-			
-			// Crear operación de cierre de caja
-			const description = `Cierre de caja - Saldo final`;
-			
-			addMockOperation({
-				type: 'expense',
-				amount: currentAmount,
-				description: description,
-				cashBoxId: id,
-				companyId: null,
-				operationDetailId: null,
-				responsiblePersonId: null,
-				standId: null
-			});
-			console.log('💰 Operación de cierre creada con saldo:', currentAmount);
-		}
-		
-		console.log('✅ Caja cerrada exitosamente');
-		return { success: true };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
+	const boxQuery = await executeQuery<{ currentAmount: number; businessDate: string }>(
+		db,
+		'SELECT current_amount, business_date FROM cash_boxes WHERE id = ?',
+		[id]
+	);
+	
+	if (boxQuery.length > 0 && boxQuery[0].currentAmount > 0) {
+		const amount = boxQuery[0].currentAmount;
+		const date = boxQuery[0].businessDate;
+		const pendingId = crypto.randomUUID();
+		await executeMutation(
+			db,
+			'INSERT INTO pending_balances (id, cash_box_id, amount, date, status, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?, ?)',
+			[pendingId, id, amount, date, 'pending', new Date().toISOString(), new Date().toISOString()]
+		);
+	}
+
 	return await executeMutation(
 		db,
-		'UPDATE cash_boxes SET status = ?, estado = ?, closed_at = CURRENT_TIMESTAMP, reopened_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-		['closed', 'cerrado', id]
+		'UPDATE cash_boxes SET status = ?, closed_at_utc = CURRENT_TIMESTAMP, reopened_at_utc = NULL, updated_at_utc = CURRENT_TIMESTAMP WHERE id = ?',
+		['closed', id]
 	);
 }
 
@@ -250,32 +217,16 @@ export async function reopenCashBox(
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('Modo desarrollo: simulando reapertura de caja');
-		updateMockCashBoxStatus(id, 'reopened', 0, reopenedAt);
-
-		const cashBox = mockCashBoxes.find(cb => cb.id === id);
-		if (cashBox) {
-			cashBox.reopenedAt = reopenedAt;
-			cashBox.updatedAt = new Date().toISOString();
-			if (options.resetCurrentAmount) {
-				cashBox.openingAmount = 0;
-			}
-			if (options.reopenReason) {
-				cashBox.reopenReason = options.reopenReason;
-			}
-			if (options.allocationNote) {
-				cashBox.reopenNotes = options.allocationNote;
-			}
-		}
-		return { success: true };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
+	const notes = options.allocationNote || options.reopenReason || null;
 	return await executeMutation(
 		db,
-		'UPDATE cash_boxes SET status = ?, estado = ?, reopened_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?',
-		['open', 'reaperturado', reopenedAt, id, 'closed']
+		'UPDATE cash_boxes SET status = ?, reopened_at_utc = ?, reopen_notes = ?, updated_at_utc = CURRENT_TIMESTAMP WHERE id = ? AND status = ?',
+		['reopened', reopenedAt, notes, id, 'closed']
 	);
 }
 
@@ -286,15 +237,24 @@ export async function updateCashBoxAmount(
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('Modo desarrollo: simulando actualización de monto');
-		return { success: true };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	return await executeMutation(
 		db,
-		'UPDATE cash_boxes SET current_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+		'UPDATE cash_boxes SET current_amount = ?, updated_at_utc = CURRENT_TIMESTAMP WHERE id = ?',
 		[amount, id]
+	);
+}
+
+export async function getOpenCashBoxes(platform: App.Platform): Promise<CashBox[]> {
+	const db = getD1Database(platform);
+	if (!db) return [];
+	
+	return await executeQuery<CashBox>(
+		db,
+		'SELECT * FROM cash_boxes WHERE status IN (\'open\', \'reopened\') ORDER BY updated_at_utc DESC'
 	);
 }

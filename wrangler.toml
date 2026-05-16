@@ -1,12 +1,22 @@
 name = "chambar"
 compatibility_date = "2024-01-15"
 
+pages_build_output_dir = ".svelte-kit/cloudflare"
+
 [[d1_databases]]
 binding = "DB"
-database_name = "chambar-dev"
-database_id = "81e6d59a-0dbf-4216-99e1-63d4326c8dab"
+database_name = "chambar-prod"
+database_id = "1149c524-0aa2-4f75-bdb8-31db23539e99"
+preview_database_id = "81e6d59a-0dbf-4216-99e1-63d4326c8dab"
+remote = true
 
 [[r2_buckets]]
 binding = "ATTACHMENTS"
 bucket_name = "chambar-attachments"
 preview_bucket_name = "chambar-attachments"
+
+[vars]
+PUBLIC_SUPABASE_URL = "https://rmuhtossltxbvszmfazb.supabase.co"
+PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtdWh0b3NzbHR4YnZzem1mYXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MDE5NTUsImV4cCI6MjA5NDM3Nzk1NX0.wG4Dx5EMsf4EWnN5Fg6_ctzFMAN3fRb6nsihUhAdbog"
+PUBLIC_R2_DOMAIN = "https://pub-864b962512dd4716bd55ca78c9645415.r2.dev"
+R2_PUBLIC_DOMAIN = "https://pub-864b962512dd4716bd55ca78c9645415.r2.dev"

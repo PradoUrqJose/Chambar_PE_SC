@@ -1,5 +1,5 @@
+
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockOperationDetails, addMockOperationDetail } from '$lib/db/mock-data';
 
 export interface OperationDetail {
 	id: string;
@@ -19,15 +19,14 @@ export interface CreateOperationDetailData {
 export async function getOperationDetails(platform: App.Platform): Promise<OperationDetail[]> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), usar datos mock
+	// Se requiere base de datos
 	if (!db) {
-		console.log('Modo desarrollo: usando detalles mock');
-		return mockOperationDetails as OperationDetail[];
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	return await executeQuery<OperationDetail>(
 		db,
-		'SELECT * FROM operation_details ORDER BY created_at DESC'
+		'SELECT * FROM operation_details ORDER BY created_at_utc DESC'
 	);
 }
 
@@ -37,18 +36,18 @@ export async function createOperationDetail(
 ): Promise<{ success: boolean; id?: string; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('Modo desarrollo: simulando creación de detalle de operación');
-		const newDetail = addMockOperationDetail(data.name, data.type, data.category);
-		return { success: true, id: newDetail.id };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
-	return await executeMutation(
+	const id = crypto.randomUUID();
+	const result = await executeMutation(
 		db,
-		'INSERT INTO operation_details (name, type, category) VALUES (?, ?, ?)',
-		[data.name, data.type, data.category]
+		'INSERT INTO operation_details (id, name, type, description, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?)',
+		[id, data.name, data.type, data.category || '', new Date().toISOString(), new Date().toISOString()]
 	);
+	return { ...result, id };
 }
 
 export async function updateOperationDetail(
@@ -77,7 +76,7 @@ export async function updateOperationDetail(
 		return { success: true };
 	}
 
-	updates.push('updated_at = CURRENT_TIMESTAMP');
+	updates.push('updated_at_utc = CURRENT_TIMESTAMP');
 	params.push(id);
 
 	return await executeMutation(

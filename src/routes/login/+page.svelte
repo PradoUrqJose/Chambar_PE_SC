@@ -22,8 +22,8 @@
 			if (error) {
 				errorMessage = error.message;
 			} else {
-				// Redirigir al dashboard
-				goto('/dashboard');
+				// Redirigir al dashboard con hard reload para asegurar cookies en SSR
+				window.location.href = '/dashboard';
 			}
 		} catch (err) {
 			errorMessage = 'Error inesperado. Intenta de nuevo.';

@@ -4,6 +4,10 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import type { LayoutData } from './$types';
 
+	import { onMount } from 'svelte';
+	import { invalidate } from '$app/navigation';
+	import { supabase } from '$lib/supabase';
+
 	let { children, data } = $props<{ children: any; data: LayoutData }>();
 	
 	// Estado del sidebar
@@ -16,6 +20,18 @@
 	function toggleSidebar() {
 		sidebarOpen = !sidebarOpen;
 	}
+
+	onMount(() => {
+		const {
+			data: { subscription }
+		} = supabase.auth.onAuthStateChange((event, session) => {
+			if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+				invalidate('supabase:auth');
+			}
+		});
+
+		return () => subscription.unsubscribe();
+	});
 </script>
 
 <svelte:head>

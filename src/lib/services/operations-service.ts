@@ -1,6 +1,7 @@
+
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockOperations, addMockOperation, mockCashBoxes } from '$lib/db/mock-data';
-import type { Attachment } from './attachments-service';
+import { deleteFile, type Attachment } from './attachments-service';
+import { updateCashBoxAmount } from './cash-boxes-service';
 
 export interface Operation {
 	id: string;
@@ -16,6 +17,7 @@ export interface Operation {
 	createdAt: string;
 	updatedAt: string;
 	businessDate: string; // Business date en zona horaria de Perú
+	attachmentsJson?: string;
 }
 
 export interface CreateOperationData {
@@ -37,41 +39,38 @@ export interface CreateOperationData {
 export async function getOperations(platform: App.Platform, date?: string): Promise<Operation[]> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), usar datos mock
+	// Se requiere base de datos
 	if (!db) {
-		// Crear una copia fresca de mockOperations para asegurar datos actualizados
-		let operations = [...mockOperations] as Operation[];
-		
-		console.log('🔍 getOperations - All mock operations:', operations.map(op => ({
-			id: op.id,
-			description: op.description,
-			businessDate: op.businessDate,
-			cashBoxId: op.cashBoxId,
-			amount: op.amount
-		})));
-		
-		// Filtrar por fecha si se proporciona (usando zona horaria de Perú)
-		if (date) {
-			console.log('🔍 getOperations - Filtering by date:', date);
-			operations = operations.filter(op => op.businessDate === date);
-			console.log('🔍 getOperations - Filtered operations:', operations.map(op => ({
-				id: op.id,
-				description: op.description,
-				businessDate: op.businessDate,
-				cashBoxId: op.cashBoxId,
-				amount: op.amount
-			})));
-		}
-		
-		console.log('🔍 getOperations - Returning operations:', operations.length);
-		
-		return operations;
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
-	return await executeQuery<Operation>(
-		db,
-		'SELECT * FROM operations ORDER BY created_at DESC'
-	);
+	let query = 'SELECT * FROM operations';
+	let params: any[] = [];
+	
+	if (date) {
+		query += ' WHERE business_date = ?';
+		params.push(date);
+	}
+	
+	query += ' ORDER BY created_at_utc DESC';
+	
+	const rows = await executeQuery<Operation>(db, query, params);
+	return rows.map(mapOperationRow);
+}
+
+function mapOperationRow(row: any): Operation {
+	const json = row.attachmentsJson || row.attachments_json;
+	if (json && typeof json === 'string') {
+		try {
+			row.attachments = JSON.parse(json);
+		} catch (e) {
+			console.error('Error parsing attachmentsJson:', e);
+			row.attachments = [];
+		}
+	} else if (!row.attachments) {
+		row.attachments = [];
+	}
+	return row as Operation;
 }
 
 export async function createOperation(
@@ -80,52 +79,54 @@ export async function createOperation(
 ): Promise<{ success: boolean; id?: string; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('💰 Modo desarrollo: creando operación para caja:', data.cashBoxId);
-		
-		// Validar que la caja existe
-		const cashBox = mockCashBoxes.find(cb => cb.id === data.cashBoxId);
-		if (!cashBox) {
-			console.error('❌ Caja no encontrada:', data.cashBoxId);
-			return { success: false, error: 'Caja no encontrada' };
-		}
-		
-		// Validar que la caja está abierta o reabierta
-		if (cashBox.status !== 'open' && cashBox.status !== 'reopened') {
-			console.error('❌ La caja no está abierta. Estado actual:', cashBox.status);
-			return { success: false, error: 'La caja no está abierta' };
-		}
-		
-		const newOperation = addMockOperation(data, data.createdAt, data.updatedAt);
-		
-		// No necesitamos actualizar el monto de la caja manualmente
-		// El currentAmount se calcula dinámicamente en el frontend usando computeCurrentAmount
-		
-		console.log('✅ Operación creada exitosamente:', newOperation.id);
-		return { success: true, id: newOperation.id };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
-	// Crear operación
+	// Fetch business_date from cash_box
+	const cashBoxRow = await executeQuery<{ businessDate: string }>(
+		db,
+		'SELECT business_date FROM cash_boxes WHERE id = ?',
+		[data.cashBoxId]
+	);
+	
+	if (!cashBoxRow || cashBoxRow.length === 0) {
+		return { success: false, error: 'Cash box not found' };
+	}
+	const businessDate = cashBoxRow[0].businessDate;
+
+	// Crear operación con blindaje para IDs
+	const id = crypto.randomUUID();
+	const isReopen = data.isReopenOperation ? 1 : 0;
+	
+	// Asegurar que capturamos los IDs sin importar el formato (camelCase o snake_case)
+	const operationDetailId = data.operationDetailId || (data as any).operation_detail_id || null;
+	const responsiblePersonId = data.responsiblePersonId || (data as any).responsible_person_id || null;
+	const standId = data.standId || (data as any).stand_id || null;
+	const companyId = data.companyId || (data as any).company_id || null;
+
+	const attachmentsJson = data.attachments ? JSON.stringify(data.attachments) : null;
+	
 	const result = await executeMutation(
 		db,
-		'INSERT INTO operations (type, amount, description, cash_box_id, operation_detail_id, responsible_person_id, stand_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-		[data.type, data.amount, data.description, data.cashBoxId, data.operationDetailId || null, data.responsiblePersonId || null, data.standId || null]
+		'INSERT INTO operations (id, type, amount, description, cash_box_id, operation_detail_id, responsible_person_id, stand_id, company_id, is_reopen_operation, created_at_utc, updated_at_utc, business_date, attachments_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+		[id, data.type, data.amount, data.description, data.cashBoxId, operationDetailId, responsiblePersonId, standId, companyId, isReopen, new Date().toISOString(), new Date().toISOString(), businessDate, attachmentsJson]
 	);
 
 	if (result.success) {
 		// Actualizar monto de caja
-		const cashBoxResult = await updateCashBoxAmount(platform, data.cashBoxId, data.amount, data.type);
+		const cashBoxResult = await updateCashBoxBalance(platform, data.cashBoxId, data.amount, data.type);
 		if (!cashBoxResult.success) {
 			console.error('Error updating cash box amount:', cashBoxResult.error);
 		}
 	}
 
-	return result;
+	return { ...result, id };
 }
 
-// Función para actualizar monto de caja
-async function updateCashBoxAmount(
+// Función para actualizar monto de caja basado en una operación
+async function updateCashBoxBalance(
 	platform: App.Platform,
 	cashBoxId: string,
 	amount: number,
@@ -138,7 +139,7 @@ async function updateCashBoxAmount(
 	}
 	
 	// Obtener monto actual
-	const currentBoxes = await executeQuery<{ current_amount: number }>(
+	const currentBoxes = await executeQuery<{ currentAmount: number }>(
 		db,
 		'SELECT current_amount FROM cash_boxes WHERE id = ?',
 		[cashBoxId]
@@ -148,14 +149,15 @@ async function updateCashBoxAmount(
 		return { success: false, error: 'Cash box not found' };
 	}
 	
-	const currentAmount = currentBoxes[0].current_amount;
+	// Usar camelCase porque executeQuery mapea automáticamente (snake_case -> camelCase)
+	const currentAmount = currentBoxes[0].currentAmount || 0;
 	const newAmount = type === 'income' 
 		? currentAmount + amount 
 		: currentAmount - amount;
 	
 	return await executeMutation(
 		db,
-		'UPDATE cash_boxes SET current_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+		'UPDATE cash_boxes SET current_amount = ?, updated_at_utc = CURRENT_TIMESTAMP WHERE id = ?',
 		[newAmount, cashBoxId]
 	);
 }
@@ -166,9 +168,9 @@ export async function getOperationById(
 ): Promise<Operation | null> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), buscar en mock
+	// Se requiere base de datos
 	if (!db) {
-		return mockOperations.find(op => op.id === id) as Operation || null;
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	const results = await executeQuery<Operation>(
@@ -177,7 +179,7 @@ export async function getOperationById(
 		[id]
 	);
 	
-	return results.length > 0 ? results[0] : null;
+	return results.length > 0 ? mapOperationRow(results[0]) : null;
 }
 
 export async function updateOperation(
@@ -187,12 +189,9 @@ export async function updateOperation(
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), usar mock data
+	// Se requiere base de datos
 	if (!db) {
-		console.log('Modo desarrollo: actualizando operación en mock data');
-		const { updateMockOperation } = await import('$lib/db/mock-data');
-		const success = updateMockOperation(id, data);
-		return { success };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	// Construir query dinámicamente
@@ -215,24 +214,40 @@ export async function updateOperation(
 		fields.push('cash_box_id = ?');
 		values.push(data.cashBoxId);
 	}
-	if (data.operationDetailId !== undefined) {
+	if (data.operationDetailId !== undefined || (data as any).operation_detail_id !== undefined) {
 		fields.push('operation_detail_id = ?');
-		values.push(data.operationDetailId);
+		values.push(data.operationDetailId || (data as any).operation_detail_id || null);
 	}
-	if (data.responsiblePersonId !== undefined) {
+	if (data.responsiblePersonId !== undefined || (data as any).responsible_person_id !== undefined) {
 		fields.push('responsible_person_id = ?');
-		values.push(data.responsiblePersonId);
+		values.push(data.responsiblePersonId || (data as any).responsible_person_id || null);
 	}
-	if (data.standId !== undefined) {
+	if (data.standId !== undefined || (data as any).stand_id !== undefined) {
 		fields.push('stand_id = ?');
-		values.push(data.standId);
+		values.push(data.standId || (data as any).stand_id || null);
+	}
+	if (data.companyId !== undefined || (data as any).company_id !== undefined) {
+		fields.push('company_id = ?');
+		values.push(data.companyId || (data as any).company_id || null);
+	}
+	if (data.isReopenOperation !== undefined || (data as any).is_reopen_operation !== undefined) {
+		fields.push('is_reopen_operation = ?');
+		const val = data.isReopenOperation !== undefined ? data.isReopenOperation : (data as any).is_reopen_operation;
+		values.push(val ? 1 : 0);
+	}
+	if (data.attachments !== undefined || (data as any).attachments_json !== undefined) {
+		fields.push('attachments_json = ?');
+		const val = data.attachments !== undefined 
+			? JSON.stringify(data.attachments) 
+			: (data as any).attachments_json;
+		values.push(val);
 	}
 	
 	if (fields.length === 0) {
 		return { success: true };
 	}
 	
-	fields.push('updated_at = CURRENT_TIMESTAMP');
+	fields.push('updated_at_utc = CURRENT_TIMESTAMP');
 	values.push(id);
 	
 	return await executeMutation(
@@ -248,15 +263,53 @@ export async function deleteOperation(
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
 	if (!db) {
-		console.log('Modo desarrollo: simulando eliminación de operación');
-		return { success: true };
+		throw new Error('D1 database not found.');
 	}
+
+	// 1. Obtener la operación para conocer el monto, tipo, caja y adjuntos
+	const operation = await getOperationById(platform, id);
+	if (!operation) {
+		return { success: false, error: 'Operación no encontrada' };
+	}
+
+	// 2. Eliminar archivos de R2 si existen
+	// Nota: en D1, attachmentsJson es el nombre que devuelve mapDbRowToCamelCase
+	const attachmentsRaw = (operation as any).attachmentsJson;
+	if (attachmentsRaw) {
+		try {
+			const attachments: Attachment[] = JSON.parse(attachmentsRaw);
+			for (const attachment of attachments) {
+				// El ID del attachment es la key en R2
+				await deleteFile(platform, attachment.id);
+			}
+		} catch (e) {
+			console.error('Error parsing attachments for deletion:', e);
+		}
+	}
+
+	// 3. Revertir el monto en la caja
+	// Si era ingreso, restamos. Si era egreso, sumamos.
+	const amountDelta = operation.type === 'income' ? -operation.amount : operation.amount;
 	
+	// Obtener el monto actual de la caja
+	const cashBoxQuery = await executeQuery<{ currentAmount: number }>(
+		db,
+		'SELECT current_amount FROM cash_boxes WHERE id = ?',
+		[operation.cashBoxId]
+	);
+
+	if (cashBoxQuery.length > 0) {
+		const newAmount = (cashBoxQuery[0].currentAmount || 0) + amountDelta;
+		await updateCashBoxAmount(platform, operation.cashBoxId, newAmount);
+	}
+
+	// 4. Eliminar de la base de datos
 	return await executeMutation(
 		db,
 		'DELETE FROM operations WHERE id = ?',
 		[id]
 	);
 }
+
+

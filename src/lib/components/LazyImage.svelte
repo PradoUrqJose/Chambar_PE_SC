@@ -6,6 +6,7 @@
 		placeholder?: string;
 		onLoad?: () => void;
 		onError?: () => void;
+		forceLoad?: boolean;
 	}
 
 	let { 
@@ -14,17 +15,18 @@
 		class: className = '', 
 		placeholder = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNiAxNkgxNlYyNEgyNFYxNkgxNloiIGZpbGw9IiM5Q0EzQUYiLz4KPC9zdmc+',
 		onLoad,
-		onError
+		onError,
+		forceLoad = false
 	}: Props = $props();
 
 	let imgRef = $state<HTMLImageElement | HTMLDivElement | null>(null);
 	let isLoaded = $state(false);
-	let isInView = $state(false);
+	let isInView = $state(forceLoad);
 	let hasError = $state(false);
 
 	// Intersection Observer para lazy loading
 	$effect(() => {
-		if (!imgRef) return;
+		if (!imgRef || forceLoad) return;
 
 		const observer = new IntersectionObserver(
 			(entries) => {

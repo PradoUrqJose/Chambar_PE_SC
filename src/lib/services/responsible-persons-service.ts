@@ -1,5 +1,5 @@
+
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockResponsiblePersons, addMockResponsiblePerson } from '$lib/db/mock-data';
 
 export interface ResponsiblePerson {
 	id: string;
@@ -19,15 +19,14 @@ export interface CreateResponsiblePersonData {
 export async function getResponsiblePersons(platform: App.Platform): Promise<ResponsiblePerson[]> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), usar datos mock
+	// Se requiere base de datos
 	if (!db) {
-		console.log('Modo desarrollo: usando responsables mock');
-		return mockResponsiblePersons as ResponsiblePerson[];
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	return await executeQuery<ResponsiblePerson>(
 		db,
-		'SELECT * FROM responsible_persons ORDER BY created_at DESC'
+		'SELECT * FROM responsible_persons ORDER BY created_at_utc DESC'
 	);
 }
 
@@ -37,18 +36,18 @@ export async function createResponsiblePerson(
 ): Promise<{ success: boolean; id?: string; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('Modo desarrollo: simulando creación de responsable');
-		const newPerson = addMockResponsiblePerson(data.name, data.email, data.phone);
-		return { success: true, id: newPerson.id };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
-	return await executeMutation(
+	const id = crypto.randomUUID();
+	const result = await executeMutation(
 		db,
-		'INSERT INTO responsible_persons (name, email, phone) VALUES (?, ?, ?)',
-		[data.name, data.email, data.phone || null]
+		'INSERT INTO responsible_persons (id, name, email, phone, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?)',
+		[id, data.name, data.email, data.phone || null, new Date().toISOString(), new Date().toISOString()]
 	);
+	return { ...result, id };
 }
 
 export async function updateResponsiblePerson(
@@ -77,7 +76,7 @@ export async function updateResponsiblePerson(
 		return { success: true };
 	}
 
-	updates.push('updated_at = CURRENT_TIMESTAMP');
+	updates.push('updated_at_utc = CURRENT_TIMESTAMP');
 	params.push(id);
 
 	return await executeMutation(

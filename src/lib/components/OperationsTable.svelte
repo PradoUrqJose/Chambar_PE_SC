@@ -26,6 +26,7 @@
     onEditOperation?: (operation: Operation) => void;
     onDeleteOperation?: (operation: Operation) => void;
     showActions?: boolean;
+    platform?: any;
   }
 
   let {
@@ -50,6 +51,7 @@
     onEditOperation = () => {},
     onDeleteOperation = () => {},
     showActions = false,
+    platform = undefined,
   }: Props = $props();
 
   // Calcular operaciones paginadas
@@ -303,8 +305,12 @@
                   {formatDatePeru(operation.createdAt)}
                 </div>
               </td>
-              <td class="px-4 py-3 text-center">
-                <AttachmentsPreview attachments={operation.attachments || []} />
+              <td class="px-4 py-3 text-center border-r border-gray-200">
+                {#if operation.attachments && operation.attachments.length > 0}
+                  <AttachmentsPreview attachments={operation.attachments} {platform} />
+                {:else}
+                  <span class="text-gray-400 text-xs">—</span>
+                {/if}
               </td>
               {#if showActions}
                 <td class="px-4 py-3 text-center">

@@ -7,12 +7,13 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		const formData = await request.formData();
 		const file = formData.get('file') as File;
 		const folder = (formData.get('folder') as string) || 'operations';
+		const customName = formData.get('fileName') as string | undefined;
 
 		if (!file) {
 			return json({ error: 'No se proporcionó ningún archivo' }, { status: 400 });
 		}
 
-		const result = await uploadFile(platform, file, folder);
+		const result = await uploadFile(platform, file, folder, customName);
 
 		if (result.success && result.attachment) {
 			return json({ 

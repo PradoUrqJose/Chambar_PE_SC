@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { PendingBalance } from '$lib/db/mock-data';
+	import type { PendingBalanceData } from '$lib/services/cash-boxes-service';
 
 	// Props
-	export let pendingBalance: PendingBalance | null = null;
+	export let pendingBalance: PendingBalanceData | null = null;
 	export let isOpen: boolean = false;
 	export let onClose: () => void = () => {};
 	export let onConfirm: (event: any) => void = () => {};

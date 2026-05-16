@@ -1,7 +1,9 @@
+import { PUBLIC_R2_DOMAIN } from '$env/static/public';
+
 // Configuración para desarrollo local
 export const DEV_CONFIG = {
 	// Simular servicios de Cloudflare
-	R2_PUBLIC_DOMAIN: 'localhost:5173',
+	R2_PUBLIC_DOMAIN: PUBLIC_R2_DOMAIN || 'localhost:5173',
 	CLOUDFLARE_ACCOUNT_HASH: 'dev-account-hash',
 	
 	// Cache settings

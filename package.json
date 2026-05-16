@@ -4,8 +4,9 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
+    "deploy": "wrangler pages deploy .svelte-kit/cloudflare",
     "dev": "vite dev",
-    "dev:cf": "wrangler pages dev .svelte-kit/cloudflare --local",
+    "dev:cf": "wrangler pages dev .svelte-kit/cloudflare",
     "build": "vite build",
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
@@ -15,16 +16,20 @@
     "db:create": "wrangler d1 create chambar-dev",
     "db:list": "wrangler d1 list",
     "db:query": "wrangler d1 execute chambar-dev --command",
-    "db:seed": "node scripts/seed-data.js",
-    "deploy": "npm run build && wrangler pages deploy .svelte-kit/cloudflare"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 execute chambar-dev --file=src/lib/db/schema.sql --local",
+    "db:migrate:remote": "wrangler d1 execute chambar-dev --file=src/lib/db/schema.sql --remote"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260515.1",
     "@skeletonlabs/tw-plugin": "^0.4.1",
     "@sveltejs/adapter-auto": "^4.0.0",
+    "@sveltejs/adapter-cloudflare": "^7.2.8",
     "@sveltejs/kit": "^2.22.0",
     "@sveltejs/vite-plugin-svelte": "^6.0.0",
     "@tailwindcss/forms": "^0.5.10",
     "autoprefixer": "^10.4.21",
+    "drizzle-kit": "^0.31.10",
     "postcss": "^8.5.6",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
@@ -36,6 +41,7 @@
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.58.0",
     "chart.js": "^4.5.0",
+    "drizzle-orm": "^0.45.2",
     "lightweight-charts": "^5.0.9",
     "xlsx": "^0.18.5"
   },

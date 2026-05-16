@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { deleteOperation } from '$lib/services/operations-service';
 
 export const DELETE: RequestHandler = async ({ platform, params }) => {
 	try {
@@ -8,27 +9,16 @@ export const DELETE: RequestHandler = async ({ platform, params }) => {
 			return json({ error: 'ID de operación requerido' }, { status: 400 });
 		}
 
-		// En modo desarrollo, eliminar de mock data
-		if (!platform?.env?.DB) {
-			const { deleteMockOperation } = await import('$lib/db/mock-data');
-			const success = deleteMockOperation(operationId);
-
-			if (success) {
-				return json({ message: 'Operación eliminada correctamente' });
-			} else {
-				return json({ error: 'Operación no encontrada' }, { status: 404 });
-			}
+		if (!platform) {
+			return json({ error: 'Platform not available' }, { status: 500 });
 		}
 
-		// En producción, eliminar de D1
-		const result = await platform.env.DB.prepare(`DELETE FROM operations WHERE id = ?`)
-			.bind(operationId)
-			.run();
+		const result = await deleteOperation(platform, operationId);
 
-		if (result.changes > 0) {
+		if (result.success) {
 			return json({ message: 'Operación eliminada correctamente' });
 		} else {
-			return json({ error: 'Operación no encontrada' }, { status: 404 });
+			return json({ error: result.error || 'Operación no encontrada' }, { status: 404 });
 		}
 	} catch (error) {
 		console.error('Error deleting operation:', error);

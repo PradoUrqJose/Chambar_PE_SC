@@ -1,18 +1,18 @@
+
 import { getD1Database, executeQuery, executeMutation } from '$lib/db/d1';
-import { mockCompanies, addCompany, updateCompany as updateMockCompany } from '$lib/db/catalog-mock-data';
 import type { Company, CreateCompanyData, UpdateCompanyData } from '$lib/types/company';
 
 export async function getCompany(platform: App.Platform): Promise<Company | null> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), usar datos mock
+	// Se requiere base de datos
 	if (!db) {
-		return mockCompanies[0] as Company;
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	const companies = await executeQuery<Company>(
 		db,
-		'SELECT * FROM companies ORDER BY created_at DESC LIMIT 1'
+		'SELECT * FROM companies ORDER BY created_at_utc DESC LIMIT 1'
 	);
 	return companies[0] || null;
 }
@@ -20,14 +20,14 @@ export async function getCompany(platform: App.Platform): Promise<Company | null
 export async function getCompanies(platform: App.Platform): Promise<Company[]> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), usar datos mock
+	// Se requiere base de datos
 	if (!db) {
-		return mockCompanies as Company[];
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	return await executeQuery<Company>(
 		db,
-		'SELECT * FROM companies ORDER BY created_at DESC'
+		'SELECT * FROM companies ORDER BY created_at_utc DESC'
 	);
 }
 
@@ -37,21 +37,18 @@ export async function createCompany(
 ): Promise<{ success: boolean; id?: string; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('Modo desarrollo: simulando creación de empresa');
-		const newCompany = addCompany({
-			razonSocial: data.razonSocial,
-			ruc: data.ruc
-		});
-		return { success: true, id: newCompany.id };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
-	return await executeMutation(
+	const id = crypto.randomUUID();
+	const result = await executeMutation(
 		db,
-		'INSERT INTO companies (razon_social, ruc) VALUES (?, ?)',
-		[data.razonSocial, data.ruc]
+		'INSERT INTO companies (id, razon_social, ruc, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?)',
+		[id, data.razonSocial, data.ruc, new Date().toISOString(), new Date().toISOString()]
 	);
+	return { ...result, id };
 }
 
 export async function updateCompany(
@@ -61,14 +58,9 @@ export async function updateCompany(
 ): Promise<{ success: boolean; error?: string }> {
 	const db = getD1Database(platform);
 	
-	// Si no hay base de datos (desarrollo local), simular éxito
+	// Se requiere base de datos
 	if (!db) {
-		console.log('Modo desarrollo: simulando actualización de empresa');
-		const updatedCompany = updateMockCompany(id, {
-			razonSocial: data.razonSocial,
-			ruc: data.ruc
-		});
-		return { success: updatedCompany !== null };
+		throw new Error('D1 database not found. Please ensure bindings are configured.');
 	}
 	
 	const updates = [];
@@ -87,7 +79,7 @@ export async function updateCompany(
 		return { success: true };
 	}
 
-	updates.push('updated_at = CURRENT_TIMESTAMP');
+	updates.push('updated_at_utc = CURRENT_TIMESTAMP');
 	params.push(id);
 
 	return await executeMutation(

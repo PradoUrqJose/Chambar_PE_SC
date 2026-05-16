@@ -24,7 +24,7 @@
 	let showModal = $state(false);
 	let selectedAttachment = $state<Attachment | null>(null);
 	let currentPage = $state(1);
-	let itemsPerPage = $state(6); // 6 archivos por página (2x3 grid)
+	let itemsPerPage = $state(8); // 8 archivos por página (2x4 grid)
 	let filterType = $state<'all' | 'image' | 'pdf' | 'excel'>('all');
 	let searchQuery = $state('');
 	let showImageZoom = $state(false);
@@ -139,8 +139,11 @@
 		}
 	});
 
+	let isLoadingThumbnails = $state(false);
+
 	async function preloadThumbnails() {
 		if (!platform || !enableThumbnails) return;
+		isLoadingThumbnails = true;
 
 		const imageUrls = attachments
 			.filter(att => isImageUrl(att.url))
@@ -150,9 +153,9 @@
 			const thumbnailMap = await Promise.all(
 				imageUrls.map(async (url) => {
 					const thumbnail = await getThumbnail(platform, url, {
-						width: 300,
-						height: 200,
-						quality: 80,
+						width: 400,
+						height: 300,
+						quality: 85,
 						format: 'webp'
 					});
 					return [url, thumbnail] as [string, string];
@@ -162,6 +165,8 @@
 			thumbnails = Object.fromEntries(thumbnailMap);
 		} catch (error) {
 			console.warn('Error pre-cargando thumbnails:', error);
+		} finally {
+			isLoadingThumbnails = false;
 		}
 	}
 
@@ -192,13 +197,13 @@
 {#if attachments && attachments.length > 0}
 	<button
 		onclick={() => openPreview(attachments[0])}
-		class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors text-xs font-medium"
+		class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-200 hover:bg-blue-100 transition-all text-xs font-semibold shadow-sm group"
 		title="Ver {attachments.length} archivo{attachments.length > 1 ? 's' : ''}"
 	>
-		<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<svg class="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
 		</svg>
-		{attachments.length}
+		<span>{attachments.length} archivo{attachments.length > 1 ? 's' : ''}</span>
 	</button>
 
 	<!-- Modal de vista previa -->
@@ -224,6 +229,14 @@
 					<div class="flex justify-between items-center mb-4">
 						<h3 id="preview-title" class="text-lg font-semibold text-gray-900">
 							Archivos Adjuntos ({filteredAttachments.length} de {attachments.length})
+							{#if isLoadingThumbnails}
+								<span class="ml-2 inline-flex items-center">
+									<svg class="animate-spin h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24">
+										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+									</svg>
+								</span>
+							{/if}
 						</h3>
 						<button
 							onclick={closePreview}
@@ -300,81 +313,78 @@
 							</p>
 						</div>
 					{:else}
-						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+						<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
 							{#each paginatedAttachments as attachment}
-							<div class="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow group">
+							<div class="group relative bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-xl hover:border-blue-200 transition-all duration-300">
 								<!-- Preview del archivo -->
 								<button 
 									type="button"
-									class="w-full bg-gray-100 aspect-video flex items-center justify-center overflow-hidden relative cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+									class="w-full bg-gray-50 aspect-[4/3] flex items-center justify-center overflow-hidden relative cursor-pointer focus:outline-none"
 									onclick={() => openImageZoom(attachment)}
-									onkeydown={(e) => e.key === 'Enter' && openImageZoom(attachment)}
-									aria-label="Ver imagen en zoom: {attachment.fileName}"
 								>
 									{#if getFileIcon(attachment.fileType) === 'image'}
-										<LazyImage
-											src={getThumbnailUrl(attachment)}
-											alt={attachment.fileName}
-											class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
-										/>
-										<!-- Overlay de zoom -->
-										<div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
-											<svg class="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-											</svg>
+										<div class="w-full h-full">
+											<LazyImage
+												src={getThumbnailUrl(attachment)}
+												alt={attachment.fileName}
+												class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+												forceLoad={true}
+											/>
 										</div>
-									{:else if getFileIcon(attachment.fileType) === 'pdf'}
-										<div class="text-center p-8">
-											<svg class="w-20 h-20 text-red-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-											</svg>
-											<p class="text-sm text-gray-600 font-medium">Archivo PDF</p>
-										</div>
-									{:else if getFileIcon(attachment.fileType) === 'excel'}
-										<div class="text-center p-8">
-											<svg class="w-20 h-20 text-green-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-											</svg>
-											<p class="text-sm text-gray-600 font-medium">Archivo Excel</p>
+										<!-- Overlay elegante -->
+										<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-end p-4">
+											<div class="flex items-center gap-2 text-white text-xs font-medium">
+												<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+												</svg>
+												Ver en grande
+											</div>
 										</div>
 									{:else}
-										<div class="text-center p-8">
-											<svg class="w-20 h-20 text-gray-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-											</svg>
-											<p class="text-sm text-gray-600 font-medium">Archivo</p>
+										<!-- Iconos para archivos no-imagen (PDF, Excel, etc) -->
+										<div class="flex flex-col items-center">
+											{#if getFileIcon(attachment.fileType) === 'pdf'}
+												<div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+													<svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+													</svg>
+												</div>
+												<span class="text-[10px] font-bold text-red-500 uppercase tracking-wider">PDF</span>
+											{:else if getFileIcon(attachment.fileType) === 'excel'}
+												<div class="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+													<svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+													</svg>
+												</div>
+												<span class="text-[10px] font-bold text-green-500 uppercase tracking-wider">Excel</span>
+											{:else}
+												<div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+													<svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+													</svg>
+												</div>
+												<span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Archivo</span>
+											{/if}
 										</div>
 									{/if}
 								</button>
-
-								<!-- Info del archivo -->
-								<div class="p-4 bg-white">
-									<p class="text-sm font-medium text-gray-900 truncate" title={attachment.fileName}>
+								
+								<!-- Info Footer -->
+								<div class="p-3 border-t border-gray-50">
+									<p class="text-xs font-semibold text-gray-800 truncate mb-1" title={attachment.fileName}>
 										{attachment.fileName}
 									</p>
-									<div class="flex items-center justify-between mt-2">
-										<div class="flex flex-col">
-											<span class="text-xs text-gray-500">
-												{formatFileSize(attachment.fileSize)}
-											</span>
-											{#if getCompressionInfo(attachment)}
-												{@const info = getCompressionInfo(attachment)}
-												<span class="text-xs text-green-600">
-													Comprimido: {formatFileSize(info.compressed)} ({Math.round((1 - info.ratio) * 100)}% menos)
-												</span>
-											{/if}
-										</div>
+									<div class="flex items-center justify-between">
+										<span class="text-[10px] text-gray-400 font-medium">{formatFileSize(attachment.fileSize)}</span>
 										<a
 											href={attachment.url}
 											download={attachment.fileName}
-											class="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-											onclick={(e) => e.stopPropagation()}
+											class="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all duration-200"
+											title="Descargar archivo"
 										>
-											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
 											</svg>
-											Descargar
 										</a>
 									</div>
 								</div>

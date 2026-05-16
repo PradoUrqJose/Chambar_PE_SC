@@ -1,7 +1,9 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 
-export const load: LayoutServerLoad = async ({ locals, url }) => {
+export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
+	depends('supabase:auth');
+
 	// Rutas que no requieren autenticación
 	const publicRoutes = ['/login'];
 	const isPublicRoute = publicRoutes.includes(url.pathname);

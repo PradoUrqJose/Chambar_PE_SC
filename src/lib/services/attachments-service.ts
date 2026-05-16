@@ -28,7 +28,8 @@ export function generateFileName(originalName: string): string {
 export async function uploadFile(
 	platform: App.Platform,
 	file: File,
-	folder: string = 'operations'
+	folder: string = 'operations',
+	customName?: string
 ): Promise<{ success: boolean; attachment?: Attachment; error?: string }> {
 	try {
 		const bucket = platform?.env?.ATTACHMENTS;
@@ -36,12 +37,18 @@ export async function uploadFile(
 		// Modo desarrollo (sin R2)
 		if (!bucket) {
 			console.log('🔧 Modo desarrollo: simulando upload de archivo');
+			const extension = file.name.split('.').pop();
+			const baseName = customName || file.name.split('.').slice(0, -1).join('.') || 'archivo';
+			const shortId = Math.random().toString(36).substring(2, 6);
+			const dateStr = new Date().toISOString().split('T')[0];
+			const finalFileName = `${baseName}-${dateStr}-${shortId}.${extension}`;
+
 			const mockAttachment: Attachment = {
 				id: `mock-${Date.now()}`,
-				fileName: file.name,
+				fileName: finalFileName,
 				fileSize: file.size,
 				fileType: file.type,
-				url: `/mock-uploads/${file.name}`,
+				url: `/mock-uploads/${finalFileName}`,
 				uploadedAt: new Date().toISOString()
 			};
 			return { success: true, attachment: mockAttachment };
@@ -85,9 +92,15 @@ export async function uploadFile(
 			}
 		});
 
+		const extension = file.name.split('.').pop();
+		const baseName = customName || file.name.split('.').slice(0, -1).join('.') || 'archivo';
+		const shortId = Math.random().toString(36).substring(2, 6);
+		const dateStr = new Date().toISOString().split('T')[0];
+		const finalFileName = `${baseName}-${dateStr}-${shortId}.${extension}`;
+
 		const attachment: Attachment = {
 			id: key,
-			fileName: file.name,
+			fileName: finalFileName,
 			fileSize: file.size,
 			fileType: file.type,
 			url: `/api/attachments/${key}`,

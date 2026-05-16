@@ -44,7 +44,8 @@
 
 	let errorMessage = $state('');
 	let isSubmitting = $state(false);
-	let uploadedFiles = $state<File[]>([]);
+	let uploadedFiles = $state<{ file: File; customName: string }[]>([]);
+	let existingAttachments = $state<Attachment[]>([]);
 	let isUploading = $state(false);
 	let compressionStats = $state<Record<string, { original: number; compressed: number; ratio: number }>>({});
 	
@@ -80,6 +81,7 @@
 				companyId: operation.companyId || '',
 				image: null
 			};
+			existingAttachments = operation.attachments || [];
 		} else {
 			// Modo creación - valores por defecto
 			formData = {
@@ -92,6 +94,7 @@
 				companyId: '',
 				image: null
 			};
+			existingAttachments = [];
 		}
 		uploadedFiles = [];
 		compressionStats = {};
@@ -122,10 +125,6 @@
 			errorMessage = 'Debe seleccionar una persona responsable';
 			return;
 		}
-		if (!formData.standId) {
-			errorMessage = 'Debe seleccionar un stand';
-			return;
-		}
 		if (!formData.companyId) {
 			errorMessage = 'Debe seleccionar una empresa';
 			return;
@@ -146,10 +145,11 @@
 			const attachments = [];
 			if (uploadedFiles.length > 0) {
 				isUploading = true;
-				for (const file of uploadedFiles) {
+				for (const item of uploadedFiles) {
 					const formDataUpload = new FormData();
-					formDataUpload.append('file', file);
+					formDataUpload.append('file', item.file);
 					formDataUpload.append('folder', 'operations');
+					formDataUpload.append('fileName', item.customName);
 
 					const response = await fetch('/api/upload', {
 						method: 'POST',
@@ -164,10 +164,13 @@
 				isUploading = false;
 			}
 
+			// Combinar con adjuntos existentes si estamos editando
+			const finalAttachments = [...existingAttachments, ...attachments];
+
 			// Preparar datos de la operación
 			const operationData: any = {
 				...formData,
-				attachments: attachments.length > 0 ? attachments : undefined
+				attachments: finalAttachments.length > 0 ? finalAttachments : undefined
 			};
 
 			// Si estamos editando, agregar el ID
@@ -197,9 +200,13 @@
 				const compressionResults = await compressFiles(newFiles);
 				
 				// Actualizar archivos y estadísticas
-				const processedFiles = compressionResults.map((result: any) => 
-					result.success ? result.compressedFile! : newFiles.find(f => f.size === result.originalSize)!
-				);
+				const processedFiles = compressionResults.map((result: any, i: number) => {
+					const file = result.success ? result.compressedFile! : newFiles[i];
+					return {
+						file,
+						customName: file.name.split('.').slice(0, -1).join('.') // Nombre sin extensión
+					};
+				});
 				
 				uploadedFiles = [...uploadedFiles, ...processedFiles];
 				
@@ -214,14 +221,31 @@
 					}
 				});
 			} else {
-				uploadedFiles = [...uploadedFiles, ...newFiles];
+				const processedFiles = newFiles.map(file => ({
+					file,
+					customName: file.name.split('.').slice(0, -1).join('.')
+				}));
+				uploadedFiles = [...uploadedFiles, ...processedFiles];
 			}
 		}
 	}
 
-	// Función para remover un archivo
+	// Función para remover un archivo nuevo
 	function removeFile(index: number) {
 		uploadedFiles = uploadedFiles.filter((_, i) => i !== index);
+	}
+
+	// Función para remover un archivo existente
+	function removeExistingAttachment(id: string) {
+		existingAttachments = existingAttachments.filter(att => att.id !== id);
+	}
+
+	// Función para obtener URL de previsualización local
+	function getLocalPreview(file: File) {
+		if (file.type.startsWith('image/')) {
+			return URL.createObjectURL(file);
+		}
+		return null;
 	}
 
 </script>
@@ -363,7 +387,7 @@
 							>
 								<option value="">Seleccionar empresa</option>
 								{#each companies as company}
-									<option value={company.id}>{company.name}</option>
+									<option value={company.id}>{company.name || company.razonSocial || 'Empresa sin nombre'}</option>
 								{/each}
 							</select>
 						</div>
@@ -397,60 +421,101 @@
 					</div>
 
 					<!-- Lista de archivos seleccionados -->
+					<!-- Adjuntos existentes (modo edición) -->
+					{#if existingAttachments.length > 0}
+						<div class="mt-4">
+							<p class="text-sm font-medium text-gray-700 mb-2">Archivos actuales:</p>
+							<div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+								{#each existingAttachments as attachment}
+									<div class="relative group border border-gray-200 rounded-md p-2 bg-gray-50">
+										<div class="flex flex-col items-center">
+											{#if attachment.fileType.startsWith('image/')}
+												<img src={attachment.url} alt="" class="w-full h-20 object-cover rounded mb-1" />
+											{:else}
+												<div class="w-full h-20 flex items-center justify-center bg-gray-200 rounded mb-1">
+													<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+													</svg>
+												</div>
+											{/if}
+											<span class="text-xs text-gray-600 truncate w-full text-center" title={attachment.fileName}>
+												{attachment.fileName}
+											</span>
+										</div>
+										<button
+											type="button"
+											onclick={() => removeExistingAttachment(attachment.id)}
+											class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+											title="Eliminar de la operación"
+											aria-label="Eliminar archivo existente"
+										>
+											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+											</svg>
+										</button>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					<!-- Nuevos archivos seleccionados -->
 					{#if uploadedFiles.length > 0}
-						<div class="mt-3 space-y-2">
-							<p class="text-sm font-medium text-gray-700">
-								Archivos seleccionados ({uploadedFiles.length}):
+						<div class="mt-4">
+							<p class="text-sm font-medium text-gray-700 mb-2">
+								Nuevos archivos ({uploadedFiles.length}):
 							</p>
-							{#each uploadedFiles as file, index}
-								<div class="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-md">
-									<div class="flex items-center gap-3 flex-1 min-w-0">
-										<!-- Icono según tipo de archivo -->
-										{#if file.type.startsWith('image/')}
-											<svg class="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-											</svg>
-										{:else if file.type.includes('pdf')}
-											<svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-											</svg>
-										{:else}
-											<svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-											</svg>
-										{/if}
-										
+							<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+								{#each uploadedFiles as item, index}
+									{@const localUrl = getLocalPreview(item.file)}
+									<div class="relative flex gap-3 border border-blue-100 rounded-lg p-3 bg-blue-50 group">
+										<!-- Miniatura -->
+										<div class="w-16 h-16 flex-shrink-0">
+											{#if localUrl}
+												<img src={localUrl} alt="" class="w-full h-full object-cover rounded shadow-sm" />
+											{:else}
+												<div class="w-full h-full flex items-center justify-center bg-blue-100 rounded shadow-sm">
+													<svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+													</svg>
+												</div>
+											{/if}
+										</div>
+
+										<!-- Edición de nombre -->
 										<div class="flex-1 min-w-0">
-											<p class="text-sm font-medium text-gray-900 truncate" title={file.name}>
-												{file.name}
-											</p>
-											<div class="flex items-center gap-2">
-												<p class="text-xs text-gray-500">
-													{formatFileSize(file.size)}
-												</p>
-												{#if compressionStats[file.name]}
-													{@const stats = compressionStats[file.name]}
-													<span class="text-xs text-green-600 font-medium">
-														({Math.round((1 - stats.ratio) * 100)}% comprimido)
-													</span>
-												{/if}
+											<label for="filename-{index}" class="block text-[10px] font-semibold text-blue-600 uppercase mb-1">Nombre del archivo</label>
+											<input
+												id="filename-{index}"
+												type="text"
+												bind:value={item.customName}
+												class="w-full px-2 py-1 text-xs border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+												placeholder="Ej: Recibo de Luz"
+											/>
+											<div class="mt-1 flex items-center gap-2">
+												<span class="text-[10px] text-blue-400 truncate max-w-[100px]">
+													Org: {item.file.name}
+												</span>
+												<span class="text-[10px] font-medium text-blue-500">
+													{formatFileSize(item.file.size)}
+												</span>
 											</div>
 										</div>
+
+										<!-- Botón remover -->
+										<button
+											type="button"
+											onclick={() => removeFile(index)}
+											class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+											aria-label="Eliminar archivo seleccionado"
+										>
+											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+											</svg>
+										</button>
 									</div>
-									
-									<!-- Botón para eliminar -->
-									<button
-										type="button"
-										onclick={() => removeFile(index)}
-										class="ml-3 text-red-500 hover:text-red-700 transition-colors flex-shrink-0"
-										aria-label="Eliminar archivo"
-									>
-										<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-										</svg>
-									</button>
-								</div>
-							{/each}
+								{/each}
+							</div>
 						</div>
 					{/if}
 				</div>
